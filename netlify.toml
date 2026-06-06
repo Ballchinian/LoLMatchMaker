@@ -14,12 +14,13 @@
 # Uncomment these 4 lines and replace the host with your Railway URL.
 # If you use this, leave VITE_API_BASE_URL UNSET in Netlify (client calls /api).
 #
-# [[redirects]]
-#   from = "/api/*"
-#   to = "https://YOUR-APP.up.railway.app/api/:splat"
-#   status = 200
-#   force = true
-# ---------------------------------------------------------------------------
+
+[[redirects]]
+from = "/api/*"
+to = "https://lolmatchmaker-production.up.railway.app/api/:splat"
+status = 200
+force = true
+
 
 # SPA fallback: serve index.html for client-side routes (React Router).
 # Keep this LAST so the /api proxy above (if enabled) matches first.
