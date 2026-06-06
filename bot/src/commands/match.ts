@@ -173,12 +173,14 @@ export const match: Command = {
   async autocomplete(interaction) {
     const focused = interaction.options.getFocused().toLowerCase();
     const matches = await apiGetMatches().catch(() => [] as ApiMatch[]);
+    // Include pending + confirmed (newest first) so `/match end` works after `/match confirm`.
     const choices = matches
-      .filter((m) => m.status === 'pending')
+      .filter((m) => m.status !== 'reversed')
       .map((m) => {
         const a = m.teamA.map((e) => e.displayName).join('/');
         const b = m.teamB.map((e) => e.displayName).join('/');
-        return { name: `A:${a} vs B:${b} (#${m._id.slice(-4)})`.slice(0, 100), value: m._id };
+        const tag = m.status === 'pending' ? '🟡' : '✅';
+        return { name: `${tag} A:${a} vs B:${b} (#${m._id.slice(-4)})`.slice(0, 100), value: m._id };
       })
       .filter((c) => c.name.toLowerCase().includes(focused))
       .slice(0, 25);
