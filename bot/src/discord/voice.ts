@@ -17,15 +17,30 @@ export async function ensureCategory(guild: Guild): Promise<CategoryChannel> {
   return guild.channels.create({ name: config.INHOUSE_CATEGORY, type: ChannelType.GuildCategory });
 }
 
-/** @everyone can't connect; only the listed members can. */
+/** @everyone can't connect; only the listed members can. The bot keeps full access to its own channels. */
 function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolvable[] {
-  return [
+  const overwrites: OverwriteResolvable[] = [
     { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.Connect] },
     ...allowMemberIds.map((id) => ({
       id,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
     })),
   ];
+  // Ensure the bot can always see/manage/move within the channels it creates,
+  // even if its server role lacks View Channel or the category is restricted.
+  const meId = guild.members.me?.id;
+  if (meId) {
+    overwrites.push({
+      id: meId,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.Connect,
+        PermissionFlagsBits.ManageChannels,
+        PermissionFlagsBits.MoveMembers,
+      ],
+    });
+  }
+  return overwrites;
 }
 
 export interface CreatedChannels {
