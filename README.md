@@ -133,8 +133,10 @@ and the Team Builder's "Select shown" button adds a whole filtered group at once
 ### Immutability
 
 Players are **append-only**: `uniqueKey` (Riot PUUID or normalized manual name) carries a
-unique index, and identity/seed fields are `immutable` in the schema. The same player
-can't be re-uploaded (`409`) or reset — only their live MMR (via matches) and their tags move.
+unique index, and **identity** fields (uniqueKey, source, displayName, region, Riot snapshot)
+are `immutable` in the schema — the same player can't be re-uploaded (`409`). Their **ratings**
+(seed MMR + current MMR) move via matches and can also be **corrected by an admin**
+(`PATCH /players/:id/mmr`), and tags are freely editable.
 
 ## API quick reference
 
@@ -148,6 +150,7 @@ can't be re-uploaded (`409`) or reset — only their live MMR (via matches) and 
 | POST   | `/api/players/search`      🔒 | Preview a Riot player (no save)               |
 | POST   | `/api/players`             🔒 | Inject a player (`riot` or `manual`)          |
 | PATCH  | `/api/players/:id/tags`    🔒 | Replace a player's tags                       |
+| PATCH  | `/api/players/:id/mmr`     🔒 | Admin override of seed and/or current MMR     |
 | POST   | `/api/teams/balance`          | Fairest split + alternatives (public)         |
 | GET    | `/api/matches`                | All games (pending + confirmed)               |
 | POST   | `/api/matches`             🔒 | Create a matchup; `winner` ⇒ confirm now      |

@@ -225,6 +225,35 @@ playersRouter.patch(
   }),
 );
 
+const mmrSchema = z
+  .object({
+    seedMMR: z.number().int().min(0).max(6000).optional(),
+    mmr: z.number().int().min(0).max(6000).optional(),
+  })
+  .refine((d) => d.seedMMR !== undefined || d.mmr !== undefined, {
+    message: 'Provide seedMMR and/or mmr.',
+  });
+
+/**
+ * PATCH /api/players/:id/mmr — admin override of a player's seed and/or current MMR.
+ * Identity stays immutable; this only touches the ratings.
+ */
+playersRouter.patch(
+  '/:id/mmr',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const body = mmrSchema.parse(req.body);
+    const player = await Player.findById(req.params.id).exec();
+    if (!player) throw new ApiError(404, 'Player not found.');
+
+    if (body.seedMMR !== undefined) player.seedMMR = body.seedMMR;
+    if (body.mmr !== undefined) player.mmr = body.mmr;
+    await player.save();
+
+    res.json({ player: player.toPublic() });
+  }),
+);
+
 const discordLinkSchema = z.object({
   discordUserId: z.string().min(1).max(32).nullable(),
 });

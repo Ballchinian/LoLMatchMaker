@@ -11,6 +11,7 @@ import {
 import { DIVISIONS, TIERS, type Division, type SearchResult, type Tier } from '../api/types';
 import { RankBadge } from '../components/RankBadge';
 import { TagEditor } from '../components/TagEditor';
+import { MmrEditor } from '../components/MmrEditor';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
@@ -310,8 +311,9 @@ function Roster() {
                 <p className="font-bold text-indigo-300">{p.mmr}</p>
               </div>
             </div>
-            <div className="mt-2 pl-10">
+            <div className="mt-2 space-y-1 pl-10">
               <TagEditor player={p} readOnly={!privileged} />
+              {privileged && <MmrEditor player={p} />}
             </div>
           </div>
         ))}

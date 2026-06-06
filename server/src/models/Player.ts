@@ -123,8 +123,9 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     riot: { type: riotSnapshotSchema, immutable: true },
     recent: { type: recentSnapshotSchema, immutable: true },
 
-    // Frozen starting MMR; `mmr` is the live value that evolves via Elo.
-    seedMMR: { type: Number, required: true, immutable: true },
+    // Starting MMR (set at injection); `mmr` is the live value that evolves via Elo.
+    // Both are admin-adjustable via PATCH /players/:id/mmr (identity stays immutable).
+    seedMMR: { type: Number, required: true },
     mmr: { type: Number, required: true, index: true },
 
     // Live ladder record (this site's custom games).

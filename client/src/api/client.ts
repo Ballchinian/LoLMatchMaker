@@ -85,6 +85,15 @@ export async function updatePlayerTags(id: string, tags: string[]): Promise<Play
   return data.player;
 }
 
+/** Admin override of a player's seed and/or current MMR. */
+export async function updatePlayerMmr(
+  id: string,
+  input: { seedMMR?: number; mmr?: number },
+): Promise<Player> {
+  const { data } = await api.patch<{ player: Player }>(`/players/${id}/mmr`, input);
+  return data.player;
+}
+
 /* ------------------------------- teams --------------------------------- */
 
 export interface BalanceInput {
