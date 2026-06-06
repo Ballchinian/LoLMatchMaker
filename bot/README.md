@@ -42,21 +42,24 @@ npm run dev
 
 ## Commands (Phase 1)
 
+All `/match` commands act on **pending** games only — completed and reversed games don't
+appear in the picker.
+
 | Command | Who | What |
 | ------- | --- | ---- |
 | `/link player:<name>` | anyone | link your Discord account to your site player |
 | `/match setup match:<pending>` | admin | create Game Comms + Team A/B, move linked players in |
 | `/match split match:<pending>` | admin | move players from Game Comms into their team channels |
-| `/match confirm match:<pending> winner:<A\|B>` | admin | confirm the result (applies MMR on the site) |
-| `/match end match:<pending>` | admin | pull everyone back to Lobby, delete the match channels |
+| `/match confirm match:<pending> winner:<A\|B>` | admin | record the result (applies MMR), return players to Lobby, delete channels |
+| `/match cancel match:<pending>` | admin | abort: return players to Lobby + delete channels; match stays pending (can re-setup) |
 
 ## Typical flow
 
 1. Admin builds teams on the website and **saves as pending** (or a player submits for review).
 2. `/match setup` → bot creates Game Comms + Team A/B and pulls the linked players in.
 3. Champ select in Game Comms → `/match split` moves them into their team channels.
-4. Game ends → `/match confirm winner:A|B` (applies MMR on the site).
-5. `/match end` → players back to Lobby, channels deleted.
+4. Game ends → `/match confirm winner:A|B` — applies MMR, returns everyone to Lobby, deletes channels.
+   - Need to abort instead? `/match cancel` clears the channels but leaves the match pending.
 
 ## Deploy on Railway (separate service)
 

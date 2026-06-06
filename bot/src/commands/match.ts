@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder, type Guild } from 'discord.js';
 import type { Command } from './types';
 import {
   apiConfirmMatch,
@@ -30,10 +30,22 @@ function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>) {
   return { linked, unlinked };
 }
 
+/** Return players to Lobby (if configured) and delete the match's channels. Returns count removed. */
+async function teardown(guild: Guild, memberIds: string[], label: string): Promise<number> {
+  if (config.LOBBY_CHANNEL_ID) {
+    await moveMembers(guild, memberIds, config.LOBBY_CHANNEL_ID);
+  }
+  const found = findMatchChannels(guild, label);
+  return deleteChannels(
+    guild,
+    found.all.map((c) => c.id),
+  );
+}
+
 export const match: Command = {
   data: new SlashCommandBuilder()
     .setName('match')
-    .setDescription('Run inhouse voice channels for a match')
+    .setDescription('Run inhouse voice channels for a pending match')
     .addSubcommand((s) =>
       s
         .setName('setup')
@@ -53,7 +65,7 @@ export const match: Command = {
     .addSubcommand((s) =>
       s
         .setName('confirm')
-        .setDescription('Confirm the winner (applies MMR on the site)')
+        .setDescription('Confirm the winner (applies MMR), return players to Lobby, delete channels')
         .addStringOption((o) =>
           o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
         )
@@ -67,10 +79,10 @@ export const match: Command = {
     )
     .addSubcommand((s) =>
       s
-        .setName('end')
-        .setDescription('Return players to Lobby and delete the match channels')
+        .setName('cancel')
+        .setDescription('Abort: return players to Lobby and delete channels (match stays pending)')
         .addStringOption((o) =>
-          o.setName('match').setDescription('Match').setRequired(true).setAutocomplete(true),
+          o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
         ),
     ),
 
@@ -96,10 +108,11 @@ export const match: Command = {
       return;
     }
 
-    if (sub === 'confirm') {
-      const winner = interaction.options.getString('winner', true) as 'A' | 'B';
-      await apiConfirmMatch(matchId, winner);
-      await interaction.editReply(`✅ Confirmed — Team ${winner} won. MMR updated on the site.`);
+    // Every /match action operates on a PENDING game only.
+    if (match.status !== 'pending') {
+      await interaction.editReply(
+        `❌ That match is **${match.status}** — only pending matches can be managed.`,
+      );
       return;
     }
 
@@ -107,6 +120,7 @@ export const match: Command = {
     const byId = new Map(players.map((p) => [p.id, p]));
     const a = resolve(match.teamA, byId);
     const b = resolve(match.teamB, byId);
+    const allLinked = [...a.linked, ...b.linked];
     const label = `#${matchId.slice(-4)}`;
 
     if (sub === 'setup') {
@@ -114,20 +128,13 @@ export const match: Command = {
       if (already.all.length > 0) {
         await interaction.editReply(
           `⚠️ This match is already set up (${already.all.length} channel(s) for ${label}). ` +
-            'Run `/match end` first if you want to recreate them.',
+            'Run `/match cancel` first if you want to recreate them.',
         );
         return;
       }
       const category = await ensureCategory(guild);
-      const channels = await createMatchChannels(
-        guild,
-        category,
-        label,
-        [...a.linked, ...b.linked],
-        a.linked,
-        b.linked,
-      );
-      const moved = await moveMembers(guild, [...a.linked, ...b.linked], channels.gameCommsId);
+      const channels = await createMatchChannels(guild, category, label, allLinked, a.linked, b.linked);
+      const moved = await moveMembers(guild, allLinked, channels.gameCommsId);
       const unlinked = [...a.unlinked, ...b.unlinked];
       await interaction.editReply(
         `✅ Created channels for ${label}. Moved ${moved} player(s) into Game Comms.` +
@@ -150,21 +157,21 @@ export const match: Command = {
       return;
     }
 
-    if (sub === 'end') {
-      const found = findMatchChannels(guild, label);
-      if (found.all.length === 0) {
-        await interaction.editReply(`❌ No channels found for ${label} (already cleaned up?).`);
-        return;
-      }
-      if (config.LOBBY_CHANNEL_ID) {
-        await moveMembers(guild, [...a.linked, ...b.linked], config.LOBBY_CHANNEL_ID);
-      }
-      const removed = await deleteChannels(
-        guild,
-        found.all.map((c) => c.id),
-      );
+    if (sub === 'confirm') {
+      const winner = interaction.options.getString('winner', true) as 'A' | 'B';
+      await apiConfirmMatch(matchId, winner); // applies MMR; match -> confirmed
+      const removed = await teardown(guild, allLinked, label);
       await interaction.editReply(
-        `✅ Match wrapped up — players returned to Lobby and ${removed} channel(s) removed.`,
+        `✅ Confirmed — Team ${winner} won, MMR updated. Returned players to Lobby and removed ${removed} channel(s).`,
+      );
+      return;
+    }
+
+    if (sub === 'cancel') {
+      const removed = await teardown(guild, allLinked, label);
+      await interaction.editReply(
+        `✅ Cancelled — returned players to Lobby and removed ${removed} channel(s). ` +
+          'The match is still pending, so you can `/match setup` again.',
       );
       return;
     }
@@ -173,14 +180,13 @@ export const match: Command = {
   async autocomplete(interaction) {
     const focused = interaction.options.getFocused().toLowerCase();
     const matches = await apiGetMatches().catch(() => [] as ApiMatch[]);
-    // Include pending + confirmed (newest first) so `/match end` works after `/match confirm`.
+    // Only pending games are manageable, so only those appear in the picker.
     const choices = matches
-      .filter((m) => m.status !== 'reversed')
+      .filter((m) => m.status === 'pending')
       .map((m) => {
         const a = m.teamA.map((e) => e.displayName).join('/');
         const b = m.teamB.map((e) => e.displayName).join('/');
-        const tag = m.status === 'pending' ? '🟡' : '✅';
-        return { name: `${tag} A:${a} vs B:${b} (#${m._id.slice(-4)})`.slice(0, 100), value: m._id };
+        return { name: `A:${a} vs B:${b} (#${m._id.slice(-4)})`.slice(0, 100), value: m._id };
       })
       .filter((c) => c.name.toLowerCase().includes(focused))
       .slice(0, 25);
