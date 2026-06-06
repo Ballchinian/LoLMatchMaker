@@ -47,6 +47,8 @@ export interface PlayerAttrs {
   gamesPlayed: number;
   /** Mutable, free-form organizational labels (e.g. "smurfs", "office", "jungle mains"). */
   tags: string[];
+  /** Discord user id linked to this player (for the bot to map voice members). */
+  discordUserId?: string;
 }
 
 export interface PlayerMethods {
@@ -64,6 +66,7 @@ export interface PublicPlayer {
   losses: number;
   gamesPlayed: number;
   tags: string[];
+  discordUserId?: string;
   rank: {
     tier: Tier;
     division: Division | null;
@@ -131,6 +134,9 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
 
     // Mutable organizational labels — NOT part of the immutable identity.
     tags: { type: [String], default: [] },
+
+    // Discord link (one Discord account ↔ one player). Mutable.
+    discordUserId: { type: String, index: { unique: true, sparse: true } },
   },
   { timestamps: true },
 );
@@ -148,6 +154,7 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     losses: this.losses,
     gamesPlayed: this.gamesPlayed,
     tags: this.tags ?? [],
+    discordUserId: this.discordUserId,
     rank: {
       tier: rank.tier,
       division: rank.division,

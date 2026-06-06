@@ -57,6 +57,7 @@ export interface Player {
   losses: number;
   gamesPlayed: number;
   tags: string[];
+  discordUserId?: string;
   rank: RankInfo;
   riot?: RiotSnapshot;
   recent?: RecentForm;

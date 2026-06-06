@@ -9,8 +9,9 @@ custom-game results.
 │  └─ src/
 │     ├─ services/   rank.ts · mmr.ts · balance.ts · elo.ts · riot.ts   <- the logic
 │     ├─ models/     Player.ts (append-only) · Match.ts
-│     └─ routes/     players · teams · matches
-└─ client/   React app (Players · Team Builder · Matches)
+│     └─ routes/     auth · players · teams · matches
+├─ client/   React app (Players · Team Builder · Matches)
+└─ bot/      Discord bot — voice-channel orchestration + result confirm (see bot/README.md)
 
 ## Prerequisites
 

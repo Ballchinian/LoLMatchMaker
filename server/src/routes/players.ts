@@ -225,4 +225,36 @@ playersRouter.patch(
   }),
 );
 
+const discordLinkSchema = z.object({
+  discordUserId: z.string().min(1).max(32).nullable(),
+});
+
+/**
+ * PATCH /api/players/:id/discord — link (or unlink with null) a Discord user id.
+ * Used by the bot to map a site player to a Discord member. One Discord id ↔ one player.
+ */
+playersRouter.patch(
+  '/:id/discord',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const { discordUserId } = discordLinkSchema.parse(req.body);
+    const player = await Player.findById(req.params.id).exec();
+    if (!player) throw new ApiError(404, 'Player not found.');
+
+    if (discordUserId) {
+      const existing = await Player.findOne({ discordUserId }).exec();
+      if (existing && existing._id.toString() !== player._id.toString()) {
+        throw new ApiError(409, 'That Discord account is already linked to another player.');
+      }
+      player.discordUserId = discordUserId;
+      await player.save();
+    } else {
+      player.set('discordUserId', undefined);
+      await player.save();
+    }
+
+    res.json({ player: player.toPublic() });
+  }),
+);
+
 export default playersRouter;
