@@ -45,19 +45,19 @@ export async function createMatchChannels(
   teamBMemberIds: string[],
 ): Promise<CreatedChannels> {
   const gameComms = await guild.channels.create({
-    name: `🎙️ Game ${label}`,
+    name: `🎙️ ${label} — Game`,
     type: ChannelType.GuildVoice,
     parent: parent.id,
     permissionOverwrites: lockOverwrites(guild, allMemberIds),
   });
   const teamA = await guild.channels.create({
-    name: `🔵 Team A ${label}`,
+    name: `🔵 ${label} — Team A`,
     type: ChannelType.GuildVoice,
     parent: parent.id,
     permissionOverwrites: lockOverwrites(guild, teamAMemberIds),
   });
   const teamB = await guild.channels.create({
-    name: `🔴 Team B ${label}`,
+    name: `🔴 ${label} — Team B`,
     type: ChannelType.GuildVoice,
     parent: parent.id,
     permissionOverwrites: lockOverwrites(guild, teamBMemberIds),
@@ -86,19 +86,28 @@ export async function moveMembers(
   return moved;
 }
 
-export async function deleteChannels(guild: Guild, ids: string[]): Promise<number> {
+export interface DeleteResult {
+  deleted: number;
+  errors: string[];
+}
+
+export async function deleteChannels(guild: Guild, ids: string[]): Promise<DeleteResult> {
   let deleted = 0;
+  const errors: string[] = [];
   for (const id of ids) {
-    const ch = guild.channels.cache.get(id) ?? (await guild.channels.fetch(id).catch(() => null));
+    // Fetch fresh so we always act on a current, manageable channel object.
+    const ch = (await guild.channels.fetch(id).catch(() => null)) ?? guild.channels.cache.get(id) ?? null;
     if (!ch) continue;
     try {
       await ch.delete();
       deleted++;
     } catch (err) {
-      console.error('[voice] failed to delete channel', id, err);
+      const reason = err instanceof Error ? err.message : String(err);
+      errors.push(`${ch.name}: ${reason}`);
+      console.error('[voice] failed to delete channel', ch.name, err);
     }
   }
-  return deleted;
+  return { deleted, errors };
 }
 
 /**

@@ -25,6 +25,8 @@ export interface RosterEntry {
 
 export interface MatchAttrs {
   status: MatchStatus;
+  /** Memorable two-word lobby name, e.g. "Feral Scuttle". */
+  name?: string;
   teamA: RosterEntry[];
   teamB: RosterEntry[];
   /** The confirmed winner (set on confirmation). */
@@ -62,6 +64,7 @@ const rosterEntrySchema = new Schema<RosterEntry>(
 const matchSchema = new Schema<MatchAttrs, MatchModel>(
   {
     status: { type: String, enum: ['pending', 'confirmed', 'reversed'], required: true, default: 'pending', index: true },
+    name: { type: String },
     teamA: { type: [rosterEntrySchema], required: true },
     teamB: { type: [rosterEntrySchema], required: true },
     winner: { type: String, enum: ['A', 'B', null], default: null },

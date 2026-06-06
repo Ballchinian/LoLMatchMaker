@@ -119,6 +119,7 @@ export interface RosterEntry {
 export interface MatchRecord {
   _id: string;
   status: MatchStatus;
+  name?: string;
   teamA: RosterEntry[];
   teamB: RosterEntry[];
   winner: 'A' | 'B' | null;

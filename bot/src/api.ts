@@ -36,6 +36,7 @@ export interface ApiRosterEntry {
 export interface ApiMatch {
   _id: string;
   status: 'pending' | 'confirmed' | 'reversed';
+  name?: string;
   teamA: ApiRosterEntry[];
   teamB: ApiRosterEntry[];
   winner: 'A' | 'B' | null;

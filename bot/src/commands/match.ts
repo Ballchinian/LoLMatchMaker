@@ -30,8 +30,8 @@ function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>) {
   return { linked, unlinked };
 }
 
-/** Return players to Lobby (if configured) and delete the match's channels. Returns count removed. */
-async function teardown(guild: Guild, memberIds: string[], label: string): Promise<number> {
+/** Return players to Lobby (if configured) and delete the match's channels. */
+async function teardown(guild: Guild, memberIds: string[], label: string) {
   if (config.LOBBY_CHANNEL_ID) {
     await moveMembers(guild, memberIds, config.LOBBY_CHANNEL_ID);
   }
@@ -40,6 +40,12 @@ async function teardown(guild: Guild, memberIds: string[], label: string): Promi
     guild,
     found.all.map((c) => c.id),
   );
+}
+
+/** Append a warning to a reply if some channels couldn't be deleted (e.g. missing perms). */
+function withErrors(base: string, errors: string[]): string {
+  if (errors.length === 0) return base;
+  return `${base}\n⚠️ Couldn't delete ${errors.length} channel(s): ${errors.join('; ')}`;
 }
 
 export const match: Command = {
@@ -121,7 +127,7 @@ export const match: Command = {
     const a = resolve(match.teamA, byId);
     const b = resolve(match.teamB, byId);
     const allLinked = [...a.linked, ...b.linked];
-    const label = `#${matchId.slice(-4)}`;
+    const label = match.name ?? `#${matchId.slice(-4)}`;
 
     if (sub === 'setup') {
       const already = findMatchChannels(guild, label);
@@ -160,18 +166,24 @@ export const match: Command = {
     if (sub === 'confirm') {
       const winner = interaction.options.getString('winner', true) as 'A' | 'B';
       await apiConfirmMatch(matchId, winner); // applies MMR; match -> confirmed
-      const removed = await teardown(guild, allLinked, label);
+      const { deleted, errors } = await teardown(guild, allLinked, label);
       await interaction.editReply(
-        `✅ Confirmed — Team ${winner} won, MMR updated. Returned players to Lobby and removed ${removed} channel(s).`,
+        withErrors(
+          `✅ Confirmed — Team ${winner} won, MMR updated. Returned players to Lobby and removed ${deleted} channel(s).`,
+          errors,
+        ),
       );
       return;
     }
 
     if (sub === 'cancel') {
-      const removed = await teardown(guild, allLinked, label);
+      const { deleted, errors } = await teardown(guild, allLinked, label);
       await interaction.editReply(
-        `✅ Cancelled — returned players to Lobby and removed ${removed} channel(s). ` +
-          'The match is still pending, so you can `/match setup` again.',
+        withErrors(
+          `✅ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
+            'The match is still pending, so you can `/match setup` again.',
+          errors,
+        ),
       );
       return;
     }
@@ -184,9 +196,10 @@ export const match: Command = {
     const choices = matches
       .filter((m) => m.status === 'pending')
       .map((m) => {
+        const label = m.name ?? `#${m._id.slice(-4)}`;
         const a = m.teamA.map((e) => e.displayName).join('/');
         const b = m.teamB.map((e) => e.displayName).join('/');
-        return { name: `A:${a} vs B:${b} (#${m._id.slice(-4)})`.slice(0, 100), value: m._id };
+        return { name: `${label} — A:${a} vs B:${b}`.slice(0, 100), value: m._id };
       })
       .filter((c) => c.name.toLowerCase().includes(focused))
       .slice(0, 25);

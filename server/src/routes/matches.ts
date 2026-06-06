@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { Player, type PlayerDoc } from '../models/Player';
 import { Match, type MatchDoc, type RosterEntry } from '../models/Match';
 import { applyMatchResult, type EloPlayer } from '../services/elo';
+import { randomLobbyName } from '../services/lobbyName';
 import { ApiError, asyncHandler } from '../middleware/errors';
 import { requireWriter, resolveCreator, type Actor } from '../middleware/auth';
 
@@ -46,6 +47,17 @@ async function loadPlayers(teamA: string[], teamB: string[]): Promise<Map<string
   if (players.length !== allIds.length) throw new ApiError(404, 'One or more players were not found.');
 
   return new Map(players.map((p) => [p._id.toString(), p]));
+}
+
+/** A lobby name not currently used by another pending match (best-effort, falls back with a suffix). */
+async function uniqueLobbyName(): Promise<string> {
+  const pending = await Match.find({ status: 'pending' }).select('name').lean().exec();
+  const taken = new Set(pending.map((m) => m.name).filter(Boolean));
+  for (let i = 0; i < 25; i++) {
+    const candidate = randomLobbyName();
+    if (!taken.has(candidate)) return candidate;
+  }
+  return `${randomLobbyName()} ${Math.floor(Math.random() * 1000)}`;
 }
 
 function rosterFrom(ids: string[], byId: Map<string, PlayerDoc>): RosterEntry[] {
@@ -183,6 +195,7 @@ matchesRouter.post(
 
     const match = await Match.create({
       status: 'pending',
+      name: await uniqueLobbyName(),
       teamA: rosterFrom(body.teamA, byId),
       teamB: rosterFrom(body.teamB, byId),
       winner: null,

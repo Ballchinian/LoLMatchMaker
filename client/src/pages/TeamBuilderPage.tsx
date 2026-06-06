@@ -353,16 +353,17 @@ export default function TeamBuilderPage() {
   const save = useMutation({
     mutationFn: (opts: { winner?: 'A' | 'B'; proposedWinner?: 'A' | 'B'; reportedBy?: string }) =>
       createMatch({ teamA: assign.a, teamB: assign.b, ...opts }),
-    onSuccess: (_data, opts) => {
+    onSuccess: (data, opts) => {
       qc.invalidateQueries({ queryKey: ['matches'] });
+      const lobby = data.match.name ? ` "${data.match.name}"` : '';
       if (opts.winner) {
         qc.invalidateQueries({ queryKey: ['players'] });
         setNotice(`Confirmed — Team ${opts.winner} won. MMR updated.`);
       } else {
         setNotice(
           privileged
-            ? 'Saved as pending — confirm the winner from the Matches tab.'
-            : 'Submitted for review — an admin will confirm it from the Matches tab.',
+            ? `Saved as pending lobby${lobby} — confirm the winner from the Matches tab.`
+            : `Submitted for review${lobby} — an admin will confirm it from the Matches tab.`,
         );
       }
       setAssign({ a: [], b: [] });

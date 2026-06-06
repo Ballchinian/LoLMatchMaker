@@ -64,8 +64,11 @@ function PendingCard({ m }: { m: MatchRecord }) {
   return (
     <Card className="border-amber-700/40">
       <div className="mb-3 flex items-center justify-between text-xs">
-        <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
-          Pending
+        <span className="flex items-center gap-2">
+          <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
+            Pending
+          </span>
+          {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
         </span>
         <span className="text-slate-500">
           created {new Date(m.createdAt).toLocaleString()} · by {m.createdByActor}
@@ -153,6 +156,7 @@ function HistoryCard({ m }: { m: MatchRecord }) {
               Reversed
             </span>
           )}
+          {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
           <span>{when}</span>
         </span>
         <span>
