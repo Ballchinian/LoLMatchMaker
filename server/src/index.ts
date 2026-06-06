@@ -5,6 +5,7 @@ import rateLimit from 'express-rate-limit';
 import { env, riotEnabled, writesProtected } from './config/env';
 import { connectDB, isDbConnected } from './db/connect';
 import { notFound, errorHandler } from './middleware/errors';
+import { requireDb } from './middleware/requireDb';
 import authRouter from './routes/auth';
 import playersRouter from './routes/players';
 import teamsRouter from './routes/teams';
@@ -37,9 +38,9 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
-app.use('/api/players', playersRouter);
-app.use('/api/teams', teamsRouter);
-app.use('/api/matches', matchesRouter);
+app.use('/api/players', requireDb, playersRouter);
+app.use('/api/teams', requireDb, teamsRouter);
+app.use('/api/matches', requireDb, matchesRouter);
 
 app.use(notFound);
 app.use(errorHandler);

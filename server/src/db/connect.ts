@@ -10,6 +10,9 @@ let connected = false;
 export async function connectDB(): Promise<void> {
   if (connected) return;
   mongoose.set('strictQuery', true);
+  // Don't queue queries when disconnected — fail fast so requests return a clear
+  // error instead of hanging for 10s (the default buffering timeout).
+  mongoose.set('bufferCommands', false);
   await mongoose.connect(env.MONGODB_URI, {
     serverSelectionTimeoutMS: 8000,
   });
