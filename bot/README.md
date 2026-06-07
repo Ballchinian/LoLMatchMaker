@@ -48,6 +48,7 @@ appear in the picker.
 | Command | Who | What |
 | ------- | --- | ---- |
 | `/link player:<name>` | anyone | link your Discord account → unlocks the server + assigns your rank role |
+| `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
 | `/setup` | admin | create the Linked role, 10 rank roles, and #signup channel |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin | create Game Comms + Team A/B, move linked players in |

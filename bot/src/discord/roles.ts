@@ -95,3 +95,10 @@ export async function syncMemberRoles(
 
   return targetName ?? 'Unranked';
 }
+
+/** Strip the Linked + any tier roles (used on unlink, re-gating the member). */
+export async function clearMemberRoles(guild: Guild, member: GuildMember): Promise<void> {
+  const names = new Set([config.LINKED_ROLE_NAME, ...Object.values(TIER_DISPLAY)]);
+  const toRemove = member.roles.cache.filter((r) => names.has(r.name)).map((r) => r.id);
+  if (toRemove.length) await member.roles.remove(toRemove, 'Match Maker unlink');
+}

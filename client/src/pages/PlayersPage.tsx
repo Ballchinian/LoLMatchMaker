@@ -12,6 +12,7 @@ import { DIVISIONS, TIERS, type Division, type SearchResult, type Tier } from '.
 import { RankBadge } from '../components/RankBadge';
 import { TagEditor } from '../components/TagEditor';
 import { MmrEditor } from '../components/MmrEditor';
+import { DiscordUnlink } from '../components/DiscordUnlink';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
@@ -314,6 +315,7 @@ function Roster() {
             <div className="mt-2 space-y-1 pl-10">
               <TagEditor player={p} readOnly={!privileged} />
               {privileged && <MmrEditor player={p} />}
+              {privileged && <DiscordUnlink player={p} />}
             </div>
           </div>
         ))}

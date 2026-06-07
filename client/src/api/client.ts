@@ -85,6 +85,14 @@ export async function updatePlayerTags(id: string, tags: string[]): Promise<Play
   return data.player;
 }
 
+/** Admin: clear a player's Discord link (e.g. they linked the wrong account). */
+export async function unlinkPlayerDiscord(id: string): Promise<Player> {
+  const { data } = await api.patch<{ player: Player }>(`/players/${id}/discord`, {
+    discordUserId: null,
+  });
+  return data.player;
+}
+
 /** Admin override of a player's seed and/or current MMR. */
 export async function updatePlayerMmr(
   id: string,
