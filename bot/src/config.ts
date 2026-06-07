@@ -10,6 +10,11 @@ const schema = z.object({
   INHOUSE_CATEGORY: z.string().default('Inhouse'),
   LOBBY_CHANNEL_ID: z.string().optional().default(''),
 
+  // Role granted on /link that gates access to the server (everything but #signup).
+  LINKED_ROLE_NAME: z.string().default('Linked'),
+  // Text channel where unlinked members run /link.
+  SIGNUP_CHANNEL_NAME: z.string().default('signup'),
+
   API_BASE_URL: z.string().url().default('http://localhost:4000/api'),
   BOT_TOKEN: z.string().min(1, 'BOT_TOKEN is required (must match the backend)'),
 });

@@ -16,6 +16,7 @@ import {
   findMatchChannels,
   moveMembers,
 } from '../discord/voice';
+import { syncMemberRoles } from '../discord/roles';
 import { config } from '../config';
 
 /** Split a team's roster into linked Discord ids vs unlinked display names. */
@@ -165,11 +166,19 @@ export const match: Command = {
 
     if (sub === 'confirm') {
       const winner = interaction.options.getString('winner', true) as 'A' | 'B';
-      await apiConfirmMatch(matchId, winner); // applies MMR; match -> confirmed
+      const updated = await apiConfirmMatch(matchId, winner); // applies MMR; match -> confirmed
+
+      // Re-sync rank roles for participants whose MMR (and maybe rank) just changed.
+      for (const p of updated) {
+        if (!p.discordUserId) continue;
+        const m = await guild.members.fetch(p.discordUserId).catch(() => null);
+        if (m) await syncMemberRoles(guild, m, p.rank.tier).catch(() => undefined);
+      }
+
       const { deleted, errors } = await teardown(guild, allLinked, label);
       await interaction.editReply(
         withErrors(
-          `✅ Confirmed — Team ${winner} won, MMR updated. Returned players to Lobby and removed ${deleted} channel(s).`,
+          `✅ Confirmed — Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
           errors,
         ),
       );

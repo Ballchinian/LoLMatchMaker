@@ -24,7 +24,7 @@ export interface ApiPlayer {
   displayName: string;
   mmr: number;
   discordUserId?: string;
-  rank: { label: string };
+  rank: { tier: string; label: string };
 }
 
 export interface ApiRosterEntry {
@@ -52,10 +52,13 @@ export const apiGetMatches = () =>
   req<{ matches: ApiMatch[] }>('/matches').then((r) => r.matches);
 
 export const apiConfirmMatch = (id: string, winner: 'A' | 'B') =>
-  req(`/matches/${id}/confirm`, { method: 'POST', body: JSON.stringify({ winner }) });
+  req<{ players: ApiPlayer[] }>(`/matches/${id}/confirm`, {
+    method: 'POST',
+    body: JSON.stringify({ winner }),
+  }).then((r) => r.players);
 
 export const apiLinkDiscord = (playerId: string, discordUserId: string | null) =>
-  req(`/players/${playerId}/discord`, {
+  req<{ player: ApiPlayer }>(`/players/${playerId}/discord`, {
     method: 'PATCH',
     body: JSON.stringify({ discordUserId }),
-  });
+  }).then((r) => r.player);

@@ -1,6 +1,7 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import type { Command } from './types';
 import { apiGetPlayers, apiLinkDiscord } from '../api';
+import { syncMemberRoles } from '../discord/roles';
 
 export const link: Command = {
   data: new SlashCommandBuilder()
@@ -14,8 +15,15 @@ export const link: Command = {
     const playerId = interaction.options.getString('player', true);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     try {
-      await apiLinkDiscord(playerId, interaction.user.id);
-      await interaction.editReply('✅ Linked your Discord account to that player.');
+      const player = await apiLinkDiscord(playerId, interaction.user.id);
+
+      let roleNote = '';
+      if (interaction.guild) {
+        const member = await interaction.guild.members.fetch(interaction.user.id);
+        const rank = await syncMemberRoles(interaction.guild, member, player.rank.tier);
+        roleNote = ` You now have access and the **${rank}** role.`;
+      }
+      await interaction.editReply(`✅ Linked to **${player.displayName}**.${roleNote}`);
     } catch (err) {
       await interaction.editReply(`❌ ${(err as Error).message}`);
     }

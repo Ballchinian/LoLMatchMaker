@@ -47,11 +47,29 @@ appear in the picker.
 
 | Command | Who | What |
 | ------- | --- | ---- |
-| `/link player:<name>` | anyone | link your Discord account to your site player |
+| `/link player:<name>` | anyone | link your Discord account → unlocks the server + assigns your rank role |
+| `/setup` | admin | create the Linked role, 10 rank roles, and #signup channel |
+| `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin | create Game Comms + Team A/B, move linked players in |
 | `/match split match:<pending>` | admin | move players from Game Comms into their team channels |
-| `/match confirm match:<pending> winner:<A\|B>` | admin | record the result (applies MMR), return players to Lobby, delete channels |
+| `/match confirm match:<pending> winner:<A\|B>` | admin | record the result (applies MMR), sync rank roles, return players to Lobby, delete channels |
 | `/match cancel match:<pending>` | admin | abort: return players to Lobby + delete channels; match stays pending (can re-setup) |
+
+## Onboarding: signup gate + rank roles
+
+New members should only see a **#signup** channel until they link, then get a Discord role
+matching their website rank (Iron … Challenger) that stays in sync.
+
+One-time setup:
+1. Run **`/setup`** — creates the `Linked` role (with View Channels), the 10 tier roles, and a
+   `#signup` channel visible to everyone.
+2. In **Server Settings → Roles → @everyone**, turn **OFF** "View Channels".
+3. Make sure the **bot's own role sits ABOVE all the rank roles** (Server Settings → Roles)
+   so it can assign them.
+
+Now: unlinked members see only **#signup**. Running **/link** there grants the `Linked` role
+(unlocking the server) plus their rank role. Ranks re-sync automatically when a match is
+confirmed; run **/syncroles** after manual MMR edits on the website.
 
 ## Typical flow
 
