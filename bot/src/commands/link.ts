@@ -33,6 +33,7 @@ export const link: Command = {
     const focused = interaction.options.getFocused().toLowerCase();
     const players = await apiGetPlayers().catch(() => []);
     const choices = players
+      .filter((p) => !p.discordUserId) // only unlinked players can be claimed
       .filter((p) => p.displayName.toLowerCase().includes(focused))
       .slice(0, 25)
       .map((p) => ({ name: `${p.displayName} (${p.rank.label})`.slice(0, 100), value: p.id }));

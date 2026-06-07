@@ -271,9 +271,17 @@ playersRouter.patch(
     if (!player) throw new ApiError(404, 'Player not found.');
 
     if (discordUserId) {
+      // This Discord account already claimed by a different player?
       const existing = await Player.findOne({ discordUserId }).exec();
       if (existing && existing._id.toString() !== player._id.toString()) {
         throw new ApiError(409, 'That Discord account is already linked to another player.');
+      }
+      // This player already linked to a different Discord account?
+      if (player.discordUserId && player.discordUserId !== discordUserId) {
+        throw new ApiError(
+          409,
+          'This player is already linked to a different Discord account. Unlink it first.',
+        );
       }
       player.discordUserId = discordUserId;
       await player.save();

@@ -45,8 +45,13 @@ export const unlink: Command = {
     // Self path: unlink whatever player the invoking account is on.
     const mine = players.find((p) => p.discordUserId === interaction.user.id);
     if (!mine) {
+      // Not linked — still strip any leftover roles (e.g. from an old overwrite).
+      if (interaction.guild) {
+        const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
+        if (member) await clearMemberRoles(interaction.guild, member).catch(() => undefined);
+      }
       await interaction.editReply(
-        "You're not linked to a player. If you linked the wrong account, run /unlink from that account, or ask an admin.",
+        "You weren't linked to a player — cleared any leftover roles. Run /link to connect the right player.",
       );
       return;
     }
