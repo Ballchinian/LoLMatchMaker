@@ -1,5 +1,6 @@
 import {
     ChannelType,
+    OverwriteType,
     PermissionFlagsBits,
     type CategoryChannel,
     type Guild,
@@ -19,10 +20,17 @@ export async function ensureCategory(guild: Guild): Promise<CategoryChannel> {
 
 /** @everyone can't connect; only the listed members can. The bot keeps full access to its own channels. */
 function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolvable[] {
+    // Every overwrite carries an explicit `type` — raw snowflake strings can't be
+    // resolved against the (lazily filled) cache and would throw InvalidType.
     const overwrites: OverwriteResolvable[] = [
-        { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.Connect] },
+        {
+        id: guild.roles.everyone.id,
+        type: OverwriteType.Role,
+        deny: [PermissionFlagsBits.Connect],
+        },
         ...allowMemberIds.map((id) => ({
         id,
+        type: OverwriteType.Member,
         allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
         })),
     ];
@@ -32,6 +40,7 @@ function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolv
     if (meId) {
         overwrites.push({
         id: meId,
+        type: OverwriteType.Member,
         allow: [
             PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.Connect,
