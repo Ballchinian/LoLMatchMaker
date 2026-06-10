@@ -17,7 +17,7 @@ export type Tier = (typeof TIERS)[number];
 export const DIVISIONS = ['IV', 'III', 'II', 'I'] as const;
 export type Division = (typeof DIVISIONS)[number];
 
-export const CHAMP_POOLS = ['one-trick', 'limited', 'diverse'] as const;
+export const CHAMP_POOLS = ['one-trick', 'two-trick', 'diverse'] as const;
 export type ChampPool = (typeof CHAMP_POOLS)[number];
 
 export interface RankInfo {
@@ -64,9 +64,9 @@ export interface Player {
     rolesPlayed: number;
     /** Champion-pool depth: one-tricks are ban-able in tournaments. */
     champPool: ChampPool;
-    /** Combined penalty: role coverage + champion pool (0–200). */
-    flexPenalty: number;
-    /** Matchmaking value used for balancing: mmr - flexPenalty. */
+    /** Versatility modifier (role coverage + champ pool): -325 … +50. */
+    mmrModifier: number;
+    /** Adjusted MMR (mmr + modifier): what users see and what balancing uses. */
     effectiveMmr: number;
     discordUserId?: string;
     rank: RankInfo;

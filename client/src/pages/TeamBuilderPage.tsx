@@ -35,18 +35,8 @@ function Card({ children, className = '' }: { children: ReactNode; className?: s
   );
 }
 
-/** A player's matchmaking value (MMR minus versatility penalty) for display. */
+/** The adjusted MMR — what users see everywhere (the modifier itself is hidden). */
 function Value({ player }: { player: Player }) {
-  if (player.flexPenalty > 0) {
-    return (
-      <span
-        className="w-12 text-right font-semibold text-amber-300"
-        title={`MMR ${player.mmr} − ${player.flexPenalty} versatility penalty`}
-      >
-        {player.effectiveMmr}
-      </span>
-    );
-  }
   return <span className="w-12 text-right font-semibold text-indigo-300">{player.effectiveMmr}</span>;
 }
 
@@ -341,9 +331,7 @@ function Bench({
               }`}
             >
               <span className="text-slate-200">{p.displayName}</span>
-              <span className={p.flexPenalty > 0 ? 'text-amber-300' : 'text-indigo-300'}>
-                {p.effectiveMmr}
-              </span>
+              <span className="text-indigo-300">{p.effectiveMmr}</span>
               <button
                 className="text-sky-400 hover:text-sky-300"
                 onPointerDown={(e) => e.stopPropagation()}
@@ -688,9 +676,7 @@ export default function TeamBuilderPage() {
           style={{ left: drag.x + 10, top: drag.y + 10 }}
         >
           <span className="font-medium text-white">{dragPlayer.displayName}</span>
-          <span className={dragPlayer.flexPenalty > 0 ? 'text-amber-300' : 'text-indigo-300'}>
-            {dragPlayer.effectiveMmr}
-          </span>
+          <span className="text-indigo-300">{dragPlayer.effectiveMmr}</span>
         </div>
       )}
     </div>

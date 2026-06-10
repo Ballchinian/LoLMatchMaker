@@ -1,7 +1,8 @@
 import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import type { Command } from './types';
-import { apiGetPlayers, apiLinkDiscord } from '../api';
+import { apiGetPlayers, apiLinkDiscord, apiUpdateRoles, type ChampPool } from '../api';
 import { syncMemberRoles } from '../discord/roles';
+import { champsOption, rolesOption } from './versatility';
 
 export const link: Command = {
     data: new SlashCommandBuilder()
@@ -9,10 +10,15 @@ export const link: Command = {
         .setDescription('Link your Discord account to your Match Maker player')
         .addStringOption((o) =>
         o.setName('player').setDescription('Your player').setRequired(true).setAutocomplete(true),
-        ),
+        )
+        // Signup questions — shared with /update (where they're optional).
+        .addIntegerOption(rolesOption(true))
+        .addStringOption(champsOption(true)),
 
     async execute(interaction) {
         const playerId = interaction.options.getString('player', true);
+        const rolesPlayed = interaction.options.getInteger('roles', true);
+        const champPool = interaction.options.getString('champs', true) as ChampPool;
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
         // If this account is already linked to a different player, move the link (it's self-service).
@@ -25,6 +31,7 @@ export const link: Command = {
         }
 
         const player = await apiLinkDiscord(playerId, interaction.user.id);
+        await apiUpdateRoles(playerId, { rolesPlayed, champPool });
 
         let roleNote = '';
         if (interaction.guild) {
@@ -33,7 +40,10 @@ export const link: Command = {
             roleNote = ` You now have access and the **${rank}** role.`;
         }
         const movedNote = movedFrom ? ` (moved from **${movedFrom}**)` : '';
-        await interaction.editReply(`✅ Linked to **${player.displayName}**${movedNote}.${roleNote}`);
+        await interaction.editReply(
+            `✅ Linked to **${player.displayName}**${movedNote}.${roleNote}` +
+            `\nRecorded: ${rolesPlayed} role(s), ${champPool}. Change these any time with /update.`,
+        );
         } catch (err) {
         await interaction.editReply(`❌ ${(err as Error).message}`);
         }

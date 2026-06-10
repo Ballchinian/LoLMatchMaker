@@ -77,7 +77,11 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor, kF
   const teamBIds = match.teamB.map((e) => e.player.toString());
 
   const byId = await loadPlayers(teamAIds, teamBIds);
-  const toElo = (ids: string[]): EloPlayer[] => ids.map((id) => ({ id, mmr: byId.get(id)!.mmr }));
+  const toElo = (ids: string[]): EloPlayer[] =>
+    ids.map((id) => {
+      const p = byId.get(id)!;
+      return { id, mmr: p.mmr, gamesPlayed: p.gamesPlayed };
+    });
 
   const outcome = applyMatchResult(toElo(teamAIds), toElo(teamBIds), winner, kFactor);
   const changeById = new Map(outcome.changes.map((c) => [c.id, c]));

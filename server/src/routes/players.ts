@@ -257,17 +257,17 @@ playersRouter.patch(
 const rolesSchema = z
   .object({
     rolesPlayed: z.number().int().min(1).max(5).optional(),
-    champPool: z.enum(['one-trick', 'limited', 'diverse']).optional(),
+    champPool: z.enum(['one-trick', 'two-trick', 'diverse']).optional(),
   })
   .refine((d) => d.rolesPlayed !== undefined || d.champPool !== undefined, {
     message: 'Provide rolesPlayed and/or champPool.',
   });
 
 /**
- * PATCH /api/players/:id/roles — set a player's versatility: how many roles they
- * cover (5 = full flex … 1 = -100) and their champion-pool depth (one-trick =
- * -100, limited = -50, diverse = 0). The penalties stack and affect team
- * balancing only; raw MMR and Elo are untouched.
+ * PATCH /api/players/:id/roles — set a player's versatility: role coverage
+ * (1 → -125 … 5 → +50) and champion-pool depth (one-trick -200, two-trick -75,
+ * diverse 0). The modifiers stack into the displayed/balancing MMR; raw MMR,
+ * ranks and Elo are untouched.
  */
 playersRouter.patch(
   '/:id/roles',

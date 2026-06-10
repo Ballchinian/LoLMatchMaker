@@ -13,18 +13,11 @@ import { RankBadge } from '../components/RankBadge';
 import { TagEditor } from '../components/TagEditor';
 import { MmrEditor } from '../components/MmrEditor';
 import { RolesEditor } from '../components/RolesEditor';
+import { TagPicker } from '../components/TagPicker';
 import { DiscordUnlink } from '../components/DiscordUnlink';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { collectTags, matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
-
-/** Parse a comma/space separated tag string into a clean list. */
-function parseTags(raw: string): string[] {
-  return raw
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
 
 function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -130,13 +123,14 @@ function RiotSearch() {
 
 function ManualAdd() {
   const qc = useQueryClient();
+  const { data: players } = useQuery({ queryKey: ['players'], queryFn: getPlayers });
   const [displayName, setDisplayName] = useState('');
   const [mode, setMode] = useState<'rank' | 'mmr'>('rank');
   const [tier, setTier] = useState<Tier>('SILVER');
   const [division, setDivision] = useState<Division>('II');
   const [lp, setLp] = useState(50);
   const [mmr, setMmr] = useState(1000);
-  const [tagsInput, setTagsInput] = useState('');
+  const [tags, setTags] = useState<string[]>([]);
 
   const isApex = tier === 'MASTER' || tier === 'GRANDMASTER' || tier === 'CHALLENGER';
 
@@ -144,7 +138,7 @@ function ManualAdd() {
     mutationFn: () =>
       injectManualPlayer({
         displayName: displayName.trim(),
-        tags: parseTags(tagsInput),
+        tags,
         ...(mode === 'rank'
           ? { rank: { tier, division: isApex ? undefined : division, leaguePoints: lp } }
           : { mmr }),
@@ -152,7 +146,7 @@ function ManualAdd() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['players'] });
       setDisplayName('');
-      setTagsInput('');
+      setTags([]);
     },
   });
 
@@ -242,13 +236,8 @@ function ManualAdd() {
         )}
 
         <div>
-          <label className="mb-1 block text-xs text-slate-400">Tags (comma-separated, optional)</label>
-          <input
-            className={inputCls}
-            value={tagsInput}
-            onChange={(e) => setTagsInput(e.target.value)}
-            placeholder="office, jungle main, smurf"
-          />
+          <label className="mb-1 block text-xs text-slate-400">Tags (optional)</label>
+          <TagPicker value={tags} onChange={setTags} allTags={collectTags(players ?? [])} />
         </div>
 
         <button type="submit" className={btnPrimary} disabled={add.isPending}>
@@ -310,12 +299,8 @@ function Roster() {
               <RankBadge rank={p.rank} size="sm" />
               <div className="w-16 text-right">
                 <p className="text-xs text-slate-500">MMR</p>
-                <p className="font-bold text-indigo-300">{p.mmr}</p>
-                {p.flexPenalty > 0 && (
-                  <p className="text-xs text-amber-400" title="Matchmaking value after role-versatility penalty">
-                    ⚖ {p.effectiveMmr}
-                  </p>
-                )}
+                {/* Users see the adjusted MMR; the rank badge stays on raw MMR. */}
+                <p className="font-bold text-indigo-300">{p.effectiveMmr}</p>
               </div>
             </div>
             <div className="mt-2 space-y-1 pl-10">

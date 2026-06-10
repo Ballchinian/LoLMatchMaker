@@ -145,6 +145,46 @@ export interface FoundChannels {
     teamB?: VoiceChannel;
 }
 
+/** Extract the match label from a managed channel name (e.g. "🔵 Funky Lobby — Team A" → "Funky Lobby"). */
+function labelFromChannelName(name: string): string | null {
+    const m = name.match(/^\S+ (.+) — (Game|Team A|Team B)$/u);
+    return m ? m[1]! : null;
+}
+
+/**
+ * Tear down channels whose match is no longer pending — e.g. it was cancelled,
+ * deleted, or confirmed from the WEBPAGE, which the bot otherwise never hears
+ * about. Members are returned to Lobby first. Only touches voice channels
+ * inside the inhouse category that follow our naming scheme.
+ */
+export async function sweepOrphanedChannels(
+    guild: Guild,
+    pendingLabels: Set<string>,
+): Promise<number> {
+    const category = guild.channels.cache.find(
+        (c) => c.type === ChannelType.GuildCategory && c.name === config.INHOUSE_CATEGORY,
+    );
+    if (!category) return 0;
+
+    const orphaned = [...guild.channels.cache.values()].filter((c): c is VoiceChannel => {
+        if (c.type !== ChannelType.GuildVoice || c.parentId !== category.id) return false;
+        const label = labelFromChannelName(c.name);
+        return label !== null && !pendingLabels.has(label);
+    });
+    if (orphaned.length === 0) return 0;
+
+    if (config.LOBBY_CHANNEL_ID) {
+        for (const ch of orphaned) {
+        await moveMembers(guild, [...ch.members.keys()], config.LOBBY_CHANNEL_ID);
+        }
+    }
+    const { deleted } = await deleteChannels(
+        guild,
+        orphaned.map((c) => c.id),
+    );
+    return deleted;
+}
+
 export function findMatchChannels(guild: Guild, label: string): FoundChannels {
     const voice = guild.channels.cache.filter(
         (c): c is VoiceChannel => c.type === ChannelType.GuildVoice && c.name.includes(label),

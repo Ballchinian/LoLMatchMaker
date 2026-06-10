@@ -66,3 +66,15 @@ export const apiLinkDiscord = (playerId: string, discordUserId: string | null) =
     method: 'PATCH',
     body: JSON.stringify({ discordUserId }),
   }).then((r) => r.player);
+
+export type ChampPool = 'one-trick' | 'two-trick' | 'diverse';
+
+/** Set a player's versatility (role coverage 1–5 and/or champion-pool depth). */
+export const apiUpdateRoles = (
+    playerId: string,
+    input: { rolesPlayed?: number; champPool?: ChampPool },
+) =>
+    req<{ player: ApiPlayer }>(`/players/${playerId}/roles`, {
+    method: 'PATCH',
+    body: JSON.stringify(input),
+  }).then((r) => r.player);

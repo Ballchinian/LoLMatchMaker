@@ -45,53 +45,63 @@ export function recentFormAdjustment(recent: RecentForm | null | undefined): num
 
 /* --------------------------- role versatility --------------------------- */
 
-/** Total roles in League; playing all of them means no role-coverage penalty. */
+/** Total roles in League. */
 export const MAX_ROLES = 5;
 
-/** Penalty per role NOT played: only 1 role = -100, all 5 roles = 0. */
-export const PENALTY_PER_MISSING_ROLE = 25;
+/** MMR modifier by how many roles a player covers: one role costs, full flex pays. */
+export const ROLE_MODIFIER: Record<number, number> = {
+  1: -125,
+  2: -50,
+  3: 0,
+  4: 25,
+  5: 50,
+};
 
 /**
  * Champion-pool depth, separate from role coverage. A champion one-trick is
  * worth far less in a draft with bans (their champ gets banned away) even if
  * they can technically fill several roles.
  */
-export const CHAMP_POOLS = ['one-trick', 'limited', 'diverse'] as const;
+export const CHAMP_POOLS = ['one-trick', 'two-trick', 'diverse'] as const;
 export type ChampPool = (typeof CHAMP_POOLS)[number];
 
-export const CHAMP_POOL_PENALTY: Record<ChampPool, number> = {
-  'one-trick': 100, // one champion — fully ban-able
-  limited: 50, // a few comfort picks
+export const CHAMP_POOL_MODIFIER: Record<ChampPool, number> = {
+  'one-trick': -200, // one champion — fully ban-able
+  'two-trick': -75, // two champions — still squeezable
   diverse: 0, // can't be banned out
 };
 
-/** Penalty for limited role coverage: 5 roles → 0 … 1 role → -100. */
-export function rolePenalty(rolesPlayed: number | undefined | null): number {
+/** Modifier for role coverage: 1 → -125, 2 → -50, 3 → 0, 4 → +25, 5 → +50. */
+export function roleModifier(rolesPlayed: number | undefined | null): number {
   const roles = clamp(Math.round(rolesPlayed ?? MAX_ROLES), 1, MAX_ROLES);
-  return (MAX_ROLES - roles) * PENALTY_PER_MISSING_ROLE;
+  return ROLE_MODIFIER[roles] ?? 0;
 }
 
 /**
- * Total matchmaking-value penalty: role coverage (0–100) PLUS champion-pool
- * depth (0–100). They stack — a one-champion, one-role player is -200.
+ * Total versatility modifier (role coverage + champion-pool depth). Can be
+ * positive: a 5-role diverse player is worth +50 over their raw MMR; a
+ * one-role one-trick bottoms out at -325.
  */
-export function flexPenalty(
+export function versatilityModifier(
   rolesPlayed: number | undefined | null,
-  champPool: ChampPool | undefined | null,
+  champPool: string | undefined | null,
 ): number {
-  return rolePenalty(rolesPlayed) + CHAMP_POOL_PENALTY[champPool ?? 'diverse'];
+  // 'limited' was the pre-rename value for a shallow pool — treat as two-trick.
+  const pool: ChampPool =
+    champPool === 'limited' ? 'two-trick' : CHAMP_POOLS.includes(champPool as ChampPool) ? (champPool as ChampPool) : 'diverse';
+  return roleModifier(rolesPlayed) + CHAMP_POOL_MODIFIER[pool];
 }
 
 /**
- * The MMR used for team balancing: live MMR minus the versatility penalties.
- * Elo (post-game gains/losses) still operates on the raw `mmr`.
+ * The adjusted MMR used for team balancing AND shown as the player's MMR.
+ * Ranks and Elo (post-game gains/losses) still operate on the raw `mmr`.
  */
 export function effectiveMMR(
   mmr: number,
   rolesPlayed: number | undefined | null,
-  champPool: ChampPool | undefined | null,
+  champPool: string | undefined | null,
 ): number {
-  return Math.max(0, mmr - flexPenalty(rolesPlayed, champPool));
+  return Math.max(0, mmr + versatilityModifier(rolesPlayed, champPool));
 }
 
 /** Compute the seed MMR for a player from whatever data we have. */

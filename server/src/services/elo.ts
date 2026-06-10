@@ -12,6 +12,8 @@
 export interface EloPlayer {
   id: string;
   mmr: number;
+  /** Inhouse games already played — drives the new-player boost. Omit to disable. */
+  gamesPlayed?: number;
 }
 
 export interface EloResult {
@@ -30,6 +32,18 @@ export interface EloOutcome {
 
 const DEFAULT_K = 32;
 const MMR_FLOOR = 0;
+
+/** Games over which the new-player boost decays back to ×1. */
+export const BOOST_GAMES = 20;
+
+/**
+ * Placement-style booster (like Riot's fresh-account LP gains): a player's
+ * first game moves their MMR at ×2, decaying linearly to ×1 by game 20.
+ */
+export function newPlayerBoost(gamesPlayed: number | undefined): number {
+  if (gamesPlayed === undefined || gamesPlayed >= BOOST_GAMES) return 1;
+  return 2 - Math.max(0, gamesPlayed) / BOOST_GAMES;
+}
 
 function teamTotal(players: EloPlayer[]): number {
   return players.reduce((sum, p) => sum + p.mmr, 0);
@@ -61,17 +75,21 @@ export function applyMatchResult(
   const actualA = winner === 'A' ? 1 : 0;
   const actualB = winner === 'B' ? 1 : 0;
 
-  const deltaA = Math.round(k * (actualA - expectedA));
-  const deltaB = Math.round(k * (actualB - expectedB));
+  // Team-wide base swing; each player's share is scaled by their own
+  // new-player boost (×2 on game 1 → ×1 from game 20 on).
+  const baseDeltaA = k * (actualA - expectedA);
+  const baseDeltaB = k * (actualB - expectedB);
 
   const changes: EloResult[] = [];
 
   for (const p of teamA) {
-    const after = Math.max(MMR_FLOOR, p.mmr + deltaA);
+    const delta = Math.round(baseDeltaA * newPlayerBoost(p.gamesPlayed));
+    const after = Math.max(MMR_FLOOR, p.mmr + delta);
     changes.push({ id: p.id, before: p.mmr, after, delta: after - p.mmr });
   }
   for (const p of teamB) {
-    const after = Math.max(MMR_FLOOR, p.mmr + deltaB);
+    const delta = Math.round(baseDeltaB * newPlayerBoost(p.gamesPlayed));
+    const after = Math.max(MMR_FLOOR, p.mmr + delta);
     changes.push({ id: p.id, before: p.mmr, after, delta: after - p.mmr });
   }
 

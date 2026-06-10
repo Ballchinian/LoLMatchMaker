@@ -19,6 +19,17 @@ import {
 import { syncMemberRoles } from '../discord/roles';
 import { config } from '../config';
 
+/** How long a setup vote stays open. */
+const POLL_DURATION_MS = 10 * 60_000;
+
+/**
+ * Votes needed to approve/reject a non-admin setup request: a strict majority
+ * of the lobby (half + 1), so one team alone can never force the outcome.
+ */
+function votesNeededFor(lobbySize: number): number {
+    return Math.floor(lobbySize / 2) + 1;
+}
+
 /** Split a team's roster into linked Discord ids vs unlinked display names. */
 function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>) {
     const linked: string[] = [];
@@ -47,6 +58,37 @@ async function teardown(guild: Guild, memberIds: string[], label: string) {
 function withErrors(base: string, errors: string[]): string {
     if (errors.length === 0) return base;
     return `${base}\n⚠️ Couldn't delete ${errors.length} channel(s): ${errors.join('; ')}`;
+}
+
+/**
+ * Create the match channels and send players straight to their team channels.
+ * (Use /match join to pull everyone back into Game Comms if something goes wrong.)
+ */
+async function runSetup(
+    guild: Guild,
+    label: string,
+    aLinked: string[],
+    bLinked: string[],
+    unlinked: string[],
+): Promise<string> {
+    const category = await ensureCategory(guild);
+    const channels = await createMatchChannels(
+        guild,
+        category,
+        label,
+        [...aLinked, ...bLinked],
+        aLinked,
+        bLinked,
+    );
+    const movedA = await moveMembers(guild, aLinked, channels.teamAId);
+    const movedB = await moveMembers(guild, bLinked, channels.teamBId);
+    return (
+        `✅ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
+        '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to re-send them to their teams.' +
+        (unlinked.length
+        ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`
+        : '')
+    );
 }
 
 export const match: Command = {
@@ -112,12 +154,15 @@ export const match: Command = {
         // (member fetch, API calls against a possibly cold backend) can be slow.
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        if (!(await isAdmin(interaction))) {
-            await interaction.editReply('❌ Admins only.');
+        const sub = interaction.options.getSubcommand();
+        const admin = await isAdmin(interaction);
+
+        // Non-admins can only REQUEST a setup (it goes to a vote); everything else is admin-only.
+        if (!admin && sub !== 'setup') {
+            await interaction.editReply('❌ Admins only. (Non-admins can request `/match setup`, which opens a vote.)');
             return;
         }
 
-        const sub = interaction.options.getSubcommand();
         const matchId = interaction.options.getString('match', true);
 
         const matches = await apiGetMatches();
@@ -151,20 +196,99 @@ export const match: Command = {
             );
             return;
         }
-        const category = await ensureCategory(guild);
-        const channels = await createMatchChannels(guild, category, label, allLinked, a.linked, b.linked);
-        // Match start: players go straight to their team channels (use /match join
-        // to pull everyone back into Game Comms if something goes wrong).
-        const movedA = await moveMembers(guild, a.linked, channels.teamAId);
-        const movedB = await moveMembers(guild, b.linked, channels.teamBId);
-        const unlinked = [...a.unlinked, ...b.unlinked];
-        await interaction.editReply(
-            `✅ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
-            '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to re-send them to their teams.' +
-            (unlinked.length
-                ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`
-                : ''),
+
+        if (admin) {
+            await interaction.editReply(await runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]));
+            return;
+        }
+
+        // Non-admin: open a public 👍/👎 vote decided by a lobby majority.
+        const channel = interaction.channel;
+        if (!channel || !channel.isSendable()) {
+            await interaction.editReply('❌ I can\'t post the vote in this channel.');
+            return;
+        }
+        const votesNeeded = votesNeededFor(match.teamA.length + match.teamB.length);
+        const poll = await channel.send(
+            `🗳️ <@${interaction.user.id}> wants to start match **${label}**.\n` +
+            `React 👍 to open it or 👎 to reject — ${votesNeeded} votes (lobby majority) either way decides ` +
+            `(expires in ${POLL_DURATION_MS / 60_000} min). Only the lobby's linked players may vote.`,
         );
+        await poll.react('👍');
+        await poll.react('👎');
+        await interaction.editReply(`🗳️ Vote opened for ${label} — ${votesNeeded} 👍 and the match starts.`);
+
+        // Only the lobby's (linked) players may vote, one vote each. We track
+        // votes ourselves instead of trusting reaction.count, removing both
+        // outsider reactions and a voter's old reaction when they switch sides.
+        const eligible = new Set(allLinked);
+        const upVoters = new Set<string>();
+        const downVoters = new Set<string>();
+
+        const collector = poll.createReactionCollector({
+            filter: (reaction, user) => !user.bot && ['👍', '👎'].includes(reaction.emoji.name ?? ''),
+            time: POLL_DURATION_MS,
+            dispose: true, // emit 'remove' when someone retracts a reaction
+        });
+
+        collector.on('collect', async (reaction, user) => {
+            if (!eligible.has(user.id)) {
+            // Not in this lobby — doesn't count; scrub the reaction (needs Manage Messages).
+            await reaction.users.remove(user.id).catch(() => undefined);
+            return;
+            }
+            if (reaction.emoji.name === '👍') {
+            upVoters.add(user.id);
+            if (downVoters.delete(user.id)) {
+                await poll.reactions.cache.get('👎')?.users.remove(user.id).catch(() => undefined);
+            }
+            } else {
+            downVoters.add(user.id);
+            if (upVoters.delete(user.id)) {
+                await poll.reactions.cache.get('👍')?.users.remove(user.id).catch(() => undefined);
+            }
+            }
+            if (upVoters.size >= votesNeeded) collector.stop('approved');
+            else if (downVoters.size >= votesNeeded) collector.stop('rejected');
+        });
+
+        // Retracting a reaction withdraws the vote.
+        collector.on('remove', (reaction, user) => {
+            if (reaction.emoji.name === '👍') upVoters.delete(user.id);
+            else downVoters.delete(user.id);
+        });
+
+        collector.on('end', async (_collected, reason) => {
+            try {
+            if (reason === 'rejected') {
+                await poll.edit(`❌ Vote failed — **${label}** was rejected (${votesNeeded} 👎).`);
+                return;
+            }
+            if (reason !== 'approved') {
+                await poll.edit(`⏰ Vote for **${label}** expired without enough votes.`);
+                return;
+            }
+            // Re-validate: the match may have been confirmed/cancelled or set up while the vote ran.
+            const fresh = (await apiGetMatches()).find((m) => m._id === matchId);
+            if (!fresh || fresh.status !== 'pending') {
+                await poll.edit(`⚠️ Vote passed, but **${label}** is no longer pending — nothing to set up.`);
+                return;
+            }
+            if (findMatchChannels(guild, label).all.length > 0) {
+                await poll.edit(`⚠️ Vote passed, but **${label}** is already set up.`);
+                return;
+            }
+            const freshPlayers = await apiGetPlayers();
+            const freshById = new Map(freshPlayers.map((p) => [p.id, p]));
+            const fa = resolve(fresh.teamA, freshById);
+            const fb = resolve(fresh.teamB, freshById);
+            const summary = await runSetup(guild, label, fa.linked, fb.linked, [...fa.unlinked, ...fb.unlinked]);
+            await poll.edit(`🗳️ Vote passed!\n${summary}`);
+            } catch (err) {
+            console.error('[match vote]', err);
+            await poll.edit(`❌ Vote passed but setup failed: ${(err as Error).message}`).catch(() => undefined);
+            }
+        });
         return;
         }
 
@@ -232,13 +356,12 @@ export const match: Command = {
         // Tight budget: autocomplete must answer within ~3s or the token dies.
         const matches = await apiGetMatches(2_000).catch(() => [] as ApiMatch[]);
         // Only pending games are manageable, so only those appear in the picker.
+        // Lobby name + team sizes only — no player names.
         const choices = matches
         .filter((m) => m.status === 'pending')
         .map((m) => {
             const label = m.name ?? `#${m._id.slice(-4)}`;
-            const a = m.teamA.map((e) => e.displayName).join('/');
-            const b = m.teamB.map((e) => e.displayName).join('/');
-            return { name: `${label} — A:${a} vs B:${b}`.slice(0, 100), value: m._id };
+            return { name: `${label} (${m.teamA.length}v${m.teamB.length})`.slice(0, 100), value: m._id };
         })
         .filter((c) => c.name.toLowerCase().includes(focused))
         .slice(0, 25);

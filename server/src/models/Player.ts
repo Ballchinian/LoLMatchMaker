@@ -1,6 +1,6 @@
 import { Schema, model, type Model, type HydratedDocument } from 'mongoose';
 import { mmrToRank, formatRank, type Tier, type Division } from '../services/rank';
-import { CHAMP_POOLS, MAX_ROLES, effectiveMMR, flexPenalty, type ChampPool } from '../services/mmr';
+import { CHAMP_POOLS, MAX_ROLES, effectiveMMR, versatilityModifier, type ChampPool } from '../services/mmr';
 
 /**
  * A Player is append-only once injected:
@@ -73,9 +73,9 @@ export interface PublicPlayer {
   tags: string[];
   rolesPlayed: number;
   champPool: ChampPool;
-  /** Combined penalty: limited role coverage + shallow champion pool (0–200). */
-  flexPenalty: number;
-  /** Matchmaking value: mmr - flexPenalty. Used for team balancing. */
+  /** Versatility modifier (role coverage + champ pool): -325 … +50. */
+  mmrModifier: number;
+  /** Adjusted MMR (mmr + modifier): shown to users and used for balancing. Ranks use raw mmr. */
   effectiveMmr: number;
   discordUserId?: string;
   rank: {
@@ -147,10 +147,11 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     // Mutable organizational labels — NOT part of the immutable identity.
     tags: { type: [String], default: [] },
 
-    // Versatility (admin-set, mutable). Roles: 5 = no penalty, 1 = -100 matchmaking
-    // value. Champ pool: one-trick = -100, limited = -50, diverse = 0. They stack.
+    // Versatility (mutable; set at /link signup or via /update / the admin UI).
+    // Roles: 1 → -125 … 5 → +50. Champ pool: one-trick -200, two-trick -75,
+    // diverse 0. They stack onto the displayed/balancing MMR; raw mmr drives ranks.
     rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: MAX_ROLES },
-    champPool: { type: String, enum: CHAMP_POOLS, default: 'diverse' },
+    champPool: { type: String, enum: [...CHAMP_POOLS, 'limited'], default: 'diverse' },
 
     // Discord link (one Discord account ↔ one player). Mutable.
     discordUserId: { type: String, index: { unique: true, sparse: true } },
@@ -172,8 +173,8 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     gamesPlayed: this.gamesPlayed,
     tags: this.tags ?? [],
     rolesPlayed: this.rolesPlayed ?? MAX_ROLES,
-    champPool: this.champPool ?? 'diverse',
-    flexPenalty: flexPenalty(this.rolesPlayed, this.champPool),
+    champPool: (this.champPool as string) === 'limited' ? 'two-trick' : (this.champPool ?? 'diverse'),
+    mmrModifier: versatilityModifier(this.rolesPlayed, this.champPool),
     effectiveMmr: effectiveMMR(this.mmr, this.rolesPlayed, this.champPool),
     discordUserId: this.discordUserId,
     rank: {
