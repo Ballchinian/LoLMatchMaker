@@ -1,4 +1,13 @@
-import { MessageFlags, SlashCommandBuilder, ThreadAutoArchiveDuration, type Guild } from 'discord.js';
+import {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType,
+    MessageFlags,
+    SlashCommandBuilder,
+    ThreadAutoArchiveDuration,
+    type Guild,
+} from 'discord.js';
 import type { Command } from './types';
 import {
     apiConfirmMatch,
@@ -19,16 +28,20 @@ import {
 import { syncMemberRoles } from '../discord/roles';
 import { config } from '../config';
 
-/** How long a setup vote stays open. */
+/** How long an approval vote stays open. */
 const POLL_DURATION_MS = 10 * 60_000;
 
 /**
- * Votes needed to approve/reject a non-admin setup request: a strict majority
- * of the lobby (half + 1), so one team alone can never force the outcome.
+ * Votes needed to approve/reject a non-admin request: a strict majority of the
+ * voters who can actually vote (the lobby's LINKED players), so one team alone
+ * can never force the outcome.
  */
-function votesNeededFor(lobbySize: number): number {
-    return Math.floor(lobbySize / 2) + 1;
+function votesNeededFor(eligibleCount: number): number {
+    return Math.floor(eligibleCount / 2) + 1;
 }
+
+/** matchId → subcommand currently being voted on. Caps each match to ONE vote at a time. */
+const activeVotes = new Map<string, string>();
 
 /** Split a team's roster into linked Discord ids vs unlinked display names. */
 function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>) {
@@ -88,6 +101,120 @@ async function runSetup(
         (unlinked.length
         ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`
         : '')
+    );
+}
+
+/**
+ * Execute a /match subcommand against a (still pending) match and return the
+ * outcome message. Used directly by admins and by approved non-admin votes,
+ * so every action validates its own preconditions here.
+ */
+async function performAction(
+    guild: Guild,
+    sub: string,
+    match: ApiMatch,
+    players: ApiPlayer[],
+    winner?: 'A' | 'B',
+): Promise<string> {
+    const byId = new Map(players.map((p) => [p.id, p]));
+    const a = resolve(match.teamA, byId);
+    const b = resolve(match.teamB, byId);
+    const allLinked = [...a.linked, ...b.linked];
+    const label = match.name ?? `#${match._id.slice(-4)}`;
+
+    if (sub === 'setup') {
+        const already = findMatchChannels(guild, label);
+        if (already.all.length > 0) {
+        return (
+            `⚠️ This match is already set up (${already.all.length} channel(s) for ${label}). ` +
+            'Run `/match cancel` first if you want to recreate them.'
+        );
+        }
+        return runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]);
+    }
+
+    if (sub === 'split') {
+        const found = findMatchChannels(guild, label);
+        if (!found.teamA || !found.teamB) {
+        return '❌ Team channels not found — run `/match setup` first.';
+        }
+        const movedA = await moveMembers(guild, a.linked, found.teamA.id);
+        const movedB = await moveMembers(guild, b.linked, found.teamB.id);
+        return `✅ Split teams — moved ${movedA} to Team A, ${movedB} to Team B.`;
+    }
+
+    if (sub === 'confirm') {
+        if (winner !== 'A' && winner !== 'B') return '❌ No winner specified.';
+        const updated = await apiConfirmMatch(match._id, winner); // applies MMR; match -> confirmed
+
+        // Re-sync rank roles for participants whose MMR (and maybe rank) just changed.
+        for (const p of updated) {
+        if (!p.discordUserId) continue;
+        const m = await guild.members.fetch(p.discordUserId).catch(() => null);
+        if (m) await syncMemberRoles(guild, m, p.rank.tier).catch(() => undefined);
+        }
+
+        const { deleted, errors } = await teardown(guild, allLinked, label);
+        return withErrors(
+        `✅ Confirmed — Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
+        errors,
+        );
+    }
+
+    if (sub === 'cancel') {
+        const { deleted, errors } = await teardown(guild, allLinked, label);
+        return withErrors(
+        `✅ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
+            'The match is still pending, so you can `/match setup` again.',
+        errors,
+        );
+    }
+
+    if (sub === 'join') {
+        const found = findMatchChannels(guild, label);
+        if (!found.gameComms) {
+        return '❌ Game Comms channel not found — run `/match setup` first.';
+        }
+        const moved = await moveMembers(guild, allLinked, found.gameComms.id);
+        return `✅ Moved ${moved} player(s) into Game Comms for ${label}.`;
+    }
+
+    return '❌ Unknown subcommand.';
+}
+
+/** Human description of the requested action, for the vote message. */
+function actionDescription(sub: string, label: string, winner?: 'A' | 'B'): string {
+    switch (sub) {
+        case 'setup':
+        return `start **${label}** (create channels & send players to their teams)`;
+        case 'split':
+        return `split **${label}** back into team channels`;
+        case 'join':
+        return `bring **${label}** together in Game Comms`;
+        case 'confirm':
+        return `confirm **Team ${winner}** won **${label}** (applies MMR!)`;
+        case 'cancel':
+        return `cancel **${label}** (everyone back to Lobby, channels deleted)`;
+        default:
+        return `run \`${sub}\` on **${label}**`;
+    }
+}
+
+/** The Approve/Reject button row, with live counts baked into the labels. */
+function voteRow(ups: number, downs: number, needed: number, disabled = false) {
+    return new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+        .setCustomId('vote-approve')
+        .setLabel(`Approve (${ups}/${needed})`)
+        .setEmoji('✅')
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(disabled),
+        new ButtonBuilder()
+        .setCustomId('vote-reject')
+        .setLabel(`Reject (${downs}/${needed})`)
+        .setEmoji('❌')
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(disabled),
     );
 }
 
@@ -155,15 +282,10 @@ export const match: Command = {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const sub = interaction.options.getSubcommand();
-        const admin = await isAdmin(interaction);
-
-        // Non-admins can only REQUEST a setup (it goes to a vote); everything else is admin-only.
-        if (!admin && sub !== 'setup') {
-            await interaction.editReply('❌ Admins only. (Non-admins can request `/match setup`, which opens a vote.)');
-            return;
-        }
-
         const matchId = interaction.options.getString('match', true);
+        const winner =
+            sub === 'confirm' ? (interaction.options.getString('winner', true) as 'A' | 'B') : undefined;
+        const admin = await isAdmin(interaction);
 
         const matches = await apiGetMatches();
         const match = matches.find((m) => m._id === matchId);
@@ -181,41 +303,56 @@ export const match: Command = {
         }
 
         const players = await apiGetPlayers();
-        const byId = new Map(players.map((p) => [p.id, p]));
-        const a = resolve(match.teamA, byId);
-        const b = resolve(match.teamB, byId);
-        const allLinked = [...a.linked, ...b.linked];
         const label = match.name ?? `#${matchId.slice(-4)}`;
 
-        if (sub === 'setup') {
-        const already = findMatchChannels(guild, label);
-        if (already.all.length > 0) {
+        // Admins act immediately.
+        if (admin) {
+            await interaction.editReply(await performAction(guild, sub, match, players, winner));
+            return;
+        }
+
+        /* ---------------- non-admin: every action goes to a vote ---------------- */
+
+        // One vote per match at a time.
+        const running = activeVotes.get(matchId);
+        if (running) {
             await interaction.editReply(
-            `⚠️ This match is already set up (${already.all.length} channel(s) for ${label}). ` +
-                'Run `/match cancel` first if you want to recreate them.',
+            `❌ A vote is already running for ${label} (\`/match ${running}\`) — wait for it to finish.`,
             );
             return;
         }
 
-        if (admin) {
-            await interaction.editReply(await runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]));
-            return;
-        }
-
-        // Non-admin: open a public 👍/👎 vote decided by a lobby majority.
         const channel = interaction.channel;
         if (!channel || !channel.isSendable()) {
             await interaction.editReply('❌ I can\'t post the vote in this channel.');
             return;
         }
-        const votesNeeded = votesNeededFor(match.teamA.length + match.teamB.length);
-        const poll = await channel.send(
-            `🗳️ <@${interaction.user.id}> wants to start match **${label}**.\n` +
-            `React 👍 to open it or 👎 to reject — ${votesNeeded} votes (lobby majority) either way decides ` +
-            `(expires in ${POLL_DURATION_MS / 60_000} min). Only the lobby's linked players may vote.`,
-        );
-        await poll.react('👍');
-        await poll.react('👎');
+
+        // Only the lobby's LINKED players may vote (we can't identify anyone else).
+        const byId = new Map(players.map((p) => [p.id, p]));
+        const a = resolve(match.teamA, byId);
+        const b = resolve(match.teamB, byId);
+        const eligible = new Set([...a.linked, ...b.linked]);
+        if (eligible.size === 0) {
+            await interaction.editReply(
+            '❌ Nobody in this lobby has linked their Discord account, so there\'s no one to vote. Players should run /link.',
+            );
+            return;
+        }
+        const votesNeeded = votesNeededFor(eligible.size);
+        const desc = actionDescription(sub, label, winner);
+        const mentions = [...eligible].map((id) => `<@${id}>`).join(' ');
+
+        const poll = await channel.send({
+            content:
+            `🗳️ <@${interaction.user.id}> wants to ${desc}.\n` +
+            `${mentions} — vote with the buttons below. ` +
+            `**${votesNeeded}** of the lobby's **${eligible.size}** linked player(s) either way decides ` +
+            `(expires in ${POLL_DURATION_MS / 60_000} min). Click your vote again to withdraw it.`,
+            components: [voteRow(0, 0, votesNeeded)],
+        });
+        activeVotes.set(matchId, sub);
+
         // Match chat: the commands channel itself is typing-locked, so give the
         // lobby a thread to discuss the vote. Locked once the vote resolves.
         const thread = await poll
@@ -224,77 +361,82 @@ export const match: Command = {
             autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
             })
             .catch(() => null);
-        await interaction.editReply(`🗳️ Vote opened for ${label} — ${votesNeeded} 👍 and the match starts.`);
+        await interaction.editReply(`🗳️ Vote opened for ${label} — ${votesNeeded} ✅ and it happens.`);
 
-        // Only the lobby's (linked) players may vote, one vote each. We track
-        // votes ourselves instead of trusting reaction.count, removing both
-        // outsider reactions and a voter's old reaction when they switch sides.
-        const eligible = new Set(allLinked);
         const upVoters = new Set<string>();
         const downVoters = new Set<string>();
 
-        const collector = poll.createReactionCollector({
-            filter: (reaction, user) => !user.bot && ['👍', '👎'].includes(reaction.emoji.name ?? ''),
+        const collector = poll.createMessageComponentCollector({
+            componentType: ComponentType.Button,
             time: POLL_DURATION_MS,
-            dispose: true, // emit 'remove' when someone retracts a reaction
         });
 
-        collector.on('collect', async (reaction, user) => {
-            if (!eligible.has(user.id)) {
-            // Not in this lobby — doesn't count; scrub the reaction (needs Manage Messages).
-            await reaction.users.remove(user.id).catch(() => undefined);
+        collector.on('collect', async (btn) => {
+            if (!eligible.has(btn.user.id)) {
+            await btn
+                .reply({
+                content: '❌ Only this lobby\'s linked players can vote on this.',
+                flags: MessageFlags.Ephemeral,
+                })
+                .catch(() => undefined);
             return;
             }
-            if (reaction.emoji.name === '👍') {
-            upVoters.add(user.id);
-            if (downVoters.delete(user.id)) {
-                await poll.reactions.cache.get('👎')?.users.remove(user.id).catch(() => undefined);
-            }
+
+            // One vote per player: clicking the other button switches, re-clicking withdraws.
+            if (btn.customId === 'vote-approve') {
+            downVoters.delete(btn.user.id);
+            upVoters.has(btn.user.id) ? upVoters.delete(btn.user.id) : upVoters.add(btn.user.id);
             } else {
-            downVoters.add(user.id);
-            if (upVoters.delete(user.id)) {
-                await poll.reactions.cache.get('👍')?.users.remove(user.id).catch(() => undefined);
+            upVoters.delete(btn.user.id);
+            downVoters.has(btn.user.id) ? downVoters.delete(btn.user.id) : downVoters.add(btn.user.id);
             }
-            }
+
+            await btn
+            .update({ components: [voteRow(upVoters.size, downVoters.size, votesNeeded)] })
+            .catch(() => undefined);
+
             if (upVoters.size >= votesNeeded) collector.stop('approved');
             else if (downVoters.size >= votesNeeded) collector.stop('rejected');
         });
 
-        // Retracting a reaction withdraws the vote.
-        collector.on('remove', (reaction, user) => {
-            if (reaction.emoji.name === '👍') upVoters.delete(user.id);
-            else downVoters.delete(user.id);
-        });
-
         collector.on('end', async (_collected, reason) => {
+            activeVotes.delete(matchId);
+            const finalRow = voteRow(upVoters.size, downVoters.size, votesNeeded, true);
             try {
             if (reason === 'rejected') {
-                await poll.edit(`❌ Vote failed — **${label}** was rejected (${votesNeeded} 👎).`);
+                await poll.edit({
+                content: `❌ Vote failed — the request to ${desc} was rejected.`,
+                components: [finalRow],
+                });
                 return;
             }
             if (reason !== 'approved') {
-                await poll.edit(`⏰ Vote for **${label}** expired without enough votes.`);
+                await poll.edit({
+                content: `⏰ The vote to ${desc} expired without enough votes.`,
+                components: [finalRow],
+                });
                 return;
             }
-            // Re-validate: the match may have been confirmed/cancelled or set up while the vote ran.
+            // Re-validate: the match may have changed while the vote ran.
             const fresh = (await apiGetMatches()).find((m) => m._id === matchId);
             if (!fresh || fresh.status !== 'pending') {
-                await poll.edit(`⚠️ Vote passed, but **${label}** is no longer pending — nothing to set up.`);
-                return;
-            }
-            if (findMatchChannels(guild, label).all.length > 0) {
-                await poll.edit(`⚠️ Vote passed, but **${label}** is already set up.`);
+                await poll.edit({
+                content: `⚠️ Vote passed, but **${label}** is no longer pending — nothing to do.`,
+                components: [finalRow],
+                });
                 return;
             }
             const freshPlayers = await apiGetPlayers();
-            const freshById = new Map(freshPlayers.map((p) => [p.id, p]));
-            const fa = resolve(fresh.teamA, freshById);
-            const fb = resolve(fresh.teamB, freshById);
-            const summary = await runSetup(guild, label, fa.linked, fb.linked, [...fa.unlinked, ...fb.unlinked]);
-            await poll.edit(`🗳️ Vote passed!\n${summary}`);
+            const summary = await performAction(guild, sub, fresh, freshPlayers, winner);
+            await poll.edit({ content: `🗳️ Vote passed!\n${summary}`, components: [finalRow] });
             } catch (err) {
             console.error('[match vote]', err);
-            await poll.edit(`❌ Vote passed but setup failed: ${(err as Error).message}`).catch(() => undefined);
+            await poll
+                .edit({
+                content: `❌ Vote passed but the action failed: ${(err as Error).message}`,
+                components: [finalRow],
+                })
+                .catch(() => undefined);
             } finally {
             // Vote is over — freeze the match chat.
             if (thread) {
@@ -303,66 +445,6 @@ export const match: Command = {
             }
             }
         });
-        return;
-        }
-
-        if (sub === 'split') {
-        const found = findMatchChannels(guild, label);
-        if (!found.teamA || !found.teamB) {
-            await interaction.editReply('❌ Team channels not found — run `/match setup` first.');
-            return;
-        }
-        const movedA = await moveMembers(guild, a.linked, found.teamA.id);
-        const movedB = await moveMembers(guild, b.linked, found.teamB.id);
-        await interaction.editReply(`✅ Split teams — moved ${movedA} to Team A, ${movedB} to Team B.`);
-        return;
-        }
-
-        if (sub === 'confirm') {
-        const winner = interaction.options.getString('winner', true) as 'A' | 'B';
-        const updated = await apiConfirmMatch(matchId, winner); // applies MMR; match -> confirmed
-
-        // Re-sync rank roles for participants whose MMR (and maybe rank) just changed.
-        for (const p of updated) {
-            if (!p.discordUserId) continue;
-            const m = await guild.members.fetch(p.discordUserId).catch(() => null);
-            if (m) await syncMemberRoles(guild, m, p.rank.tier).catch(() => undefined);
-        }
-
-        const { deleted, errors } = await teardown(guild, allLinked, label);
-        await interaction.editReply(
-            withErrors(
-            `✅ Confirmed — Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
-            errors,
-            ),
-        );
-        return;
-        }
-
-        if (sub === 'cancel') {
-        const { deleted, errors } = await teardown(guild, allLinked, label);
-        await interaction.editReply(
-            withErrors(
-            `✅ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
-                'The match is still pending, so you can `/match setup` again.',
-            errors,
-            ),
-        );
-        return;
-        }
-
-        if (sub === 'join') {
-        const found = findMatchChannels(guild, label);
-        if (!found.gameComms) {
-            await interaction.editReply('❌ Game Comms channel not found — run `/match setup` first.');
-            return;
-        }
-        const moved = await moveMembers(guild, allLinked, found.gameComms.id);
-        await interaction.editReply(`✅ Moved ${moved} player(s) into Game Comms for ${label}.`);
-        return;
-        }
-
-        await interaction.editReply('❌ Unknown subcommand.');
     },
 
     async autocomplete(interaction) {

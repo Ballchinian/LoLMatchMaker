@@ -10,8 +10,6 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildVoiceStates,
         GatewayIntentBits.GuildMembers,
-        // Needed for the /match setup approval polls (👍/👎 reaction counting).
-        GatewayIntentBits.GuildMessageReactions,
         // Needed to auto-delete normal messages in the commands channel.
         GatewayIntentBits.GuildMessages,
     ],
