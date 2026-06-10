@@ -4,236 +4,235 @@ import { apiErrorMessage, confirmMatch, deleteMatch, getMatches, reverseMatch } 
 import type { MatchRecord, RosterEntry } from '../api/types';
 import { usePrivileged } from '../lib/usePrivileged';
 
-const btnGhost =
-  'rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
+const btnGhost = 'rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
 
 function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
-  );
+    return (
+        <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
+    );
 }
 
 /** A team's roster. Shows before→after + delta once confirmed, else the MMR at creation. */
 function TeamSide({ team, label, highlight }: { team: RosterEntry[]; label: string; highlight: string }) {
-  const avg = team.length ? Math.round(team.reduce((s, e) => s + (e.after ?? e.mmrAtCreate), 0) / team.length) : 0;
-  return (
-    <div className={`flex-1 rounded-xl border p-3 ${highlight}`}>
-      <p className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
-        <span>{label}</span>
-        <span className="text-indigo-300">avg {avg}</span>
-      </p>
-      <ul className="space-y-1">
-        {team.map((e) => (
-          <li key={e.player} className="flex items-center justify-between text-sm">
-            <span className="text-slate-200">{e.displayName}</span>
-            {e.before != null && e.after != null ? (
-              <span className="flex items-center gap-2">
-                <span className="text-slate-500">
-                  {e.before}→{e.after}
-                </span>
-                <span className={(e.delta ?? 0) >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400'}>
-                  {(e.delta ?? 0) >= 0 ? `+${e.delta}` : e.delta}
-                </span>
-              </span>
-            ) : (
-              <span className="text-slate-500">{e.mmrAtCreate}</span>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+    const avg = team.length ? Math.round(team.reduce((s, e) => s + (e.after ?? e.mmrAtCreate), 0) / team.length) : 0;
+    return (
+        <div className={`flex-1 rounded-xl border p-3 ${highlight}`}>
+            <p className="mb-2 flex items-center justify-between text-xs font-bold uppercase tracking-wide text-slate-400">
+                <span>{label}</span>
+                <span className="text-indigo-300">avg {avg}</span>
+            </p>
+            <ul className="space-y-1">
+                {team.map((e) => (
+                <li key={e.player} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-200">{e.displayName}</span>
+                    {e.before != null && e.after != null ? (
+                    <span className="flex items-center gap-2">
+                        <span className="text-slate-500">
+                        {e.before}→{e.after}
+                        </span>
+                        <span className={(e.delta ?? 0) >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400'}>
+                        {(e.delta ?? 0) >= 0 ? `+${e.delta}` : e.delta}
+                        </span>
+                    </span>
+                    ) : (
+                    <span className="text-slate-500">{e.mmrAtCreate}</span>
+                    )}
+                </li>
+                ))}
+            </ul>
+        </div>
+    );
 }
 
 function PendingCard({ m }: { m: MatchRecord }) {
-  const qc = useQueryClient();
-  const privileged = usePrivileged();
+    const qc = useQueryClient();
+    const privileged = usePrivileged();
 
-  const confirm = useMutation({
-    mutationFn: (winner: 'A' | 'B') => confirmMatch(m._id, winner),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['matches'] });
-      qc.invalidateQueries({ queryKey: ['players'] });
-    },
-  });
-  const discard = useMutation({
-    mutationFn: () => deleteMatch(m._id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
-  });
+    const confirm = useMutation({
+        mutationFn: (winner: 'A' | 'B') => confirmMatch(m._id, winner),
+        onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['matches'] });
+        qc.invalidateQueries({ queryKey: ['players'] });
+        },
+    });
+    const discard = useMutation({
+        mutationFn: () => deleteMatch(m._id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
+    });
 
-  return (
-    <Card className="border-amber-700/40">
-      <div className="mb-3 flex items-center justify-between text-xs">
-        <span className="flex items-center gap-2">
-          <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
-            Pending
-          </span>
-          {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
-        </span>
-        <span className="text-slate-500">
-          created {new Date(m.createdAt).toLocaleString()} · by {m.createdByActor}
-        </span>
-      </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <TeamSide team={m.teamA} label="Team A" highlight="border-sky-700/40 bg-slate-950/40" />
-        <TeamSide team={m.teamB} label="Team B" highlight="border-rose-700/40 bg-slate-950/40" />
-      </div>
-
-      {(m.reportedBy || m.proposedWinner) && (
-        <p className="mt-3 text-xs text-slate-400">
-          {m.reportedBy ? (
-            <>
-              Reported by <span className="text-slate-200">{m.reportedBy}</span>
-            </>
-          ) : (
-            'Reported anonymously'
-          )}
-          {m.proposedWinner && (
-            <>
-              {' '}· claims <span className="text-amber-300">Team {m.proposedWinner}</span> won
-            </>
-          )}
-        </p>
-      )}
-
-      {privileged ? (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          <span className="text-xs uppercase tracking-wide text-slate-400">Who won?</span>
-          <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('A')}>
-            Team A
-          </button>
-          <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('B')}>
-            Team B
-          </button>
-          <button
-            className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
-            disabled={discard.isPending}
-            onClick={() => discard.mutate()}
-          >
-            Discard
-          </button>
+    return (
+        <Card className="border-amber-700/40">
+        <div className="mb-3 flex items-center justify-between text-xs">
+            <span className="flex items-center gap-2">
+            <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
+                Pending
+            </span>
+            {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
+            </span>
+            <span className="text-slate-500">
+            created {new Date(m.createdAt).toLocaleString()} · by {m.createdByActor}
+            </span>
         </div>
-      ) : (
-        <p className="mt-4 text-sm text-slate-500">Awaiting an admin to confirm the winner.</p>
-      )}
-      {(confirm.isError || discard.isError) && (
-        <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(confirm.error ?? discard.error)}</p>
-      )}
-    </Card>
-  );
+        <div className="flex flex-col gap-3 sm:flex-row">
+            <TeamSide team={m.teamA} label="Team A" highlight="border-sky-700/40 bg-slate-950/40" />
+            <TeamSide team={m.teamB} label="Team B" highlight="border-rose-700/40 bg-slate-950/40" />
+        </div>
+
+        {(m.reportedBy || m.proposedWinner) && (
+            <p className="mt-3 text-xs text-slate-400">
+            {m.reportedBy ? (
+                <>
+                Reported by <span className="text-slate-200">{m.reportedBy}</span>
+                </>
+            ) : (
+                'Reported anonymously'
+            )}
+            {m.proposedWinner && (
+                <>
+                {' '}· claims <span className="text-amber-300">Team {m.proposedWinner}</span> won
+                </>
+            )}
+            </p>
+        )}
+
+        {privileged ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-400">Who won?</span>
+            <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('A')}>
+                Team A
+            </button>
+            <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('B')}>
+                Team B
+            </button>
+            <button
+                className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
+                disabled={discard.isPending}
+                onClick={() => discard.mutate()}
+            >
+                Discard
+            </button>
+            </div>
+        ) : (
+            <p className="mt-4 text-sm text-slate-500">Awaiting an admin to confirm the winner.</p>
+        )}
+        {(confirm.isError || discard.isError) && (
+            <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(confirm.error ?? discard.error)}</p>
+        )}
+        </Card>
+    );
 }
 
 function HistoryCard({ m }: { m: MatchRecord }) {
-  const qc = useQueryClient();
-  const privileged = usePrivileged();
-  const reversed = m.status === 'reversed';
+    const qc = useQueryClient();
+    const privileged = usePrivileged();
+    const reversed = m.status === 'reversed';
 
-  const reverse = useMutation({
-    mutationFn: () => reverseMatch(m._id),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['matches'] });
-      qc.invalidateQueries({ queryKey: ['players'] });
-    },
-  });
+    const reverse = useMutation({
+        mutationFn: () => reverseMatch(m._id),
+        onSuccess: () => {
+        qc.invalidateQueries({ queryKey: ['matches'] });
+        qc.invalidateQueries({ queryKey: ['players'] });
+        },
+    });
 
-  const when = reversed
-    ? m.reversedAt && new Date(m.reversedAt).toLocaleString()
-    : m.confirmedAt
-      ? new Date(m.confirmedAt).toLocaleString()
-      : new Date(m.createdAt).toLocaleString();
+    const when = reversed
+        ? m.reversedAt && new Date(m.reversedAt).toLocaleString()
+        : m.confirmedAt
+        ? new Date(m.confirmedAt).toLocaleString()
+        : new Date(m.createdAt).toLocaleString();
 
-  const highlight = (side: 'A' | 'B') =>
-    !reversed && m.winner === side
-      ? 'border-emerald-700/50 bg-emerald-950/20'
-      : 'border-slate-800 bg-slate-950/40';
+    const highlight = (side: 'A' | 'B') =>
+        !reversed && m.winner === side
+        ? 'border-emerald-700/50 bg-emerald-950/20'
+        : 'border-slate-800 bg-slate-950/40';
 
-  return (
-    <Card className={reversed ? 'opacity-70' : ''}>
-      <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
-        <span className="flex items-center gap-2">
-          {reversed && (
-            <span className="rounded-full border border-rose-700/50 bg-rose-900/30 px-2 py-0.5 font-semibold text-rose-300">
-              Reversed
+    return (
+        <Card className={reversed ? 'opacity-70' : ''}>
+        <div className="mb-3 flex items-center justify-between text-xs text-slate-400">
+            <span className="flex items-center gap-2">
+            {reversed && (
+                <span className="rounded-full border border-rose-700/50 bg-rose-900/30 px-2 py-0.5 font-semibold text-rose-300">
+                Reversed
+                </span>
+            )}
+            {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
+            <span>{when}</span>
             </span>
-          )}
-          {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
-          <span>{when}</span>
-        </span>
-        <span>
-          win chance A {Math.round((m.expectedA ?? 0) * 100)}% · K={m.kFactor ?? 32}
-        </span>
-      </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <TeamSide team={m.teamA} label={`Team A${m.winner === 'A' ? ' — won' : ''}`} highlight={highlight('A')} />
-        <TeamSide team={m.teamB} label={`Team B${m.winner === 'B' ? ' — won' : ''}`} highlight={highlight('B')} />
-      </div>
-
-      {reversed ? (
-        <p className="mt-3 text-xs text-rose-300/80">
-          MMR changes undone{m.reversedByActor ? ` by ${m.reversedByActor}` : ''} — kept for the record.
-        </p>
-      ) : privileged ? (
-        <div className="mt-3 flex items-center gap-3">
-          <button
-            className="rounded-lg border border-rose-800/60 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:border-rose-600 disabled:opacity-50"
-            disabled={reverse.isPending}
-            onClick={() => {
-              if (
-                window.confirm(
-                  "Reverse this match? Each player's MMR and W/L from this game will be undone. It stays in history as reversed.",
-                )
-              ) {
-                reverse.mutate();
-              }
-            }}
-          >
-            {reverse.isPending ? 'Reversing…' : 'Reverse result'}
-          </button>
-          {reverse.isError && <span className="text-xs text-rose-400">{apiErrorMessage(reverse.error)}</span>}
+            <span>
+            win chance A {Math.round((m.expectedA ?? 0) * 100)}% · K={m.kFactor ?? 32}
+            </span>
         </div>
-      ) : null}
-    </Card>
-  );
+        <div className="flex flex-col gap-3 sm:flex-row">
+            <TeamSide team={m.teamA} label={`Team A${m.winner === 'A' ? ' — won' : ''}`} highlight={highlight('A')} />
+            <TeamSide team={m.teamB} label={`Team B${m.winner === 'B' ? ' — won' : ''}`} highlight={highlight('B')} />
+        </div>
+
+        {reversed ? (
+            <p className="mt-3 text-xs text-rose-300/80">
+            MMR changes undone{m.reversedByActor ? ` by ${m.reversedByActor}` : ''} — kept for the record.
+            </p>
+        ) : privileged ? (
+            <div className="mt-3 flex items-center gap-3">
+            <button
+                className="rounded-lg border border-rose-800/60 px-3 py-1.5 text-xs font-medium text-rose-300 transition hover:border-rose-600 disabled:opacity-50"
+                disabled={reverse.isPending}
+                onClick={() => {
+                if (
+                    window.confirm(
+                    "Reverse this match? Each player's MMR and W/L from this game will be undone. It stays in history as reversed.",
+                    )
+                ) {
+                    reverse.mutate();
+                }
+                }}
+            >
+                {reverse.isPending ? 'Reversing…' : 'Reverse result'}
+            </button>
+            {reverse.isError && <span className="text-xs text-rose-400">{apiErrorMessage(reverse.error)}</span>}
+            </div>
+        ) : null}
+        </Card>
+    );
 }
 
 export default function MatchesPage() {
-  const { data, isLoading, isError, error } = useQuery({ queryKey: ['matches'], queryFn: getMatches });
+    const { data, isLoading, isError, error } = useQuery({ queryKey: ['matches'], queryFn: getMatches });
 
-  if (isLoading) return <Card>Loading match history…</Card>;
-  if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
-  if (!data || data.length === 0)
+    if (isLoading) return <Card>Loading match history…</Card>;
+    if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
+    if (!data || data.length === 0)
+        return (
+        <Card>
+            <span className="text-slate-400">No games yet. Build teams and confirm or save a result.</span>
+        </Card>
+        );
+
+    const pending = data.filter((m) => m.status === 'pending');
+    const history = data.filter((m) => m.status !== 'pending'); // confirmed + reversed, newest first
+
     return (
-      <Card>
-        <span className="text-slate-400">No games yet. Build teams and confirm or save a result.</span>
-      </Card>
-    );
-
-  const pending = data.filter((m) => m.status === 'pending');
-  const history = data.filter((m) => m.status !== 'pending'); // confirmed + reversed, newest first
-
-  return (
-    <div className="space-y-6">
-      {pending.length > 0 && (
-        <section className="space-y-4">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-400">
-            Pending ({pending.length})
-          </h2>
-          {pending.map((m) => (
-            <PendingCard key={m._id} m={m} />
-          ))}
-        </section>
-      )}
-
-      <section className="space-y-4">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-          History ({history.length})
-        </h2>
-        {history.length === 0 ? (
-          <Card><span className="text-slate-500">No confirmed games yet.</span></Card>
-        ) : (
-          history.map((m) => <HistoryCard key={m._id} m={m} />)
+        <div className="space-y-6">
+        {pending.length > 0 && (
+            <section className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-400">
+                Pending ({pending.length})
+            </h2>
+            {pending.map((m) => (
+                <PendingCard key={m._id} m={m} />
+            ))}
+            </section>
         )}
-      </section>
-    </div>
-  );
+
+        <section className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            History ({history.length})
+            </h2>
+            {history.length === 0 ? (
+            <Card><span className="text-slate-500">No confirmed games yet.</span></Card>
+            ) : (
+            history.map((m) => <HistoryCard key={m._id} m={m} />)
+            )}
+        </section>
+        </div>
+    );
 }

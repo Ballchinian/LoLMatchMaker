@@ -3,8 +3,10 @@
  * winning team gains MMR and every player on the losing team loses MMR, scaled by
  * how surprising the result was (an upset moves MMR more than an expected win).
  *
- * Each team is rated by its average MMR. We compute the expected score for team A,
- * then apply the same magnitude of change to every member of a team.
+ * Each team is rated by its average MMR — with uneven teams, BOTH totals divide
+ * by the larger team's size, so a short-handed team is rated below a full one.
+ * We compute the expected score for team A, then apply the same magnitude of
+ * change to every member of a team.
  */
 
 export interface EloPlayer {
@@ -29,9 +31,8 @@ export interface EloOutcome {
 const DEFAULT_K = 32;
 const MMR_FLOOR = 0;
 
-function average(players: EloPlayer[]): number {
-  if (players.length === 0) return 0;
-  return players.reduce((sum, p) => sum + p.mmr, 0) / players.length;
+function teamTotal(players: EloPlayer[]): number {
+  return players.reduce((sum, p) => sum + p.mmr, 0);
 }
 
 /** Standard logistic expectation: probability that rating A beats rating B. */
@@ -50,8 +51,9 @@ export function applyMatchResult(
   winner: 'A' | 'B',
   k: number = DEFAULT_K,
 ): EloOutcome {
-  const teamAAvg = average(teamA);
-  const teamBAvg = average(teamB);
+  const divisor = Math.max(teamA.length, teamB.length, 1);
+  const teamAAvg = teamTotal(teamA) / divisor;
+  const teamBAvg = teamTotal(teamB) / divisor;
 
   const expectedA = expectedScore(teamAAvg, teamBAvg);
   const expectedB = 1 - expectedA;

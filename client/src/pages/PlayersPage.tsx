@@ -12,9 +12,10 @@ import { DIVISIONS, TIERS, type Division, type SearchResult, type Tier } from '.
 import { RankBadge } from '../components/RankBadge';
 import { TagEditor } from '../components/TagEditor';
 import { MmrEditor } from '../components/MmrEditor';
+import { RolesEditor } from '../components/RolesEditor';
 import { DiscordUnlink } from '../components/DiscordUnlink';
 import { TagFilterBar } from '../components/TagFilterBar';
-import { matchesTagFilter } from '../lib/tags';
+import { collectTags, matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
 
 /** Parse a comma/space separated tag string into a clean list. */
@@ -310,10 +311,16 @@ function Roster() {
               <div className="w-16 text-right">
                 <p className="text-xs text-slate-500">MMR</p>
                 <p className="font-bold text-indigo-300">{p.mmr}</p>
+                {p.flexPenalty > 0 && (
+                  <p className="text-xs text-amber-400" title="Matchmaking value after role-versatility penalty">
+                    ⚖ {p.effectiveMmr}
+                  </p>
+                )}
               </div>
             </div>
             <div className="mt-2 space-y-1 pl-10">
-              <TagEditor player={p} readOnly={!privileged} />
+              <TagEditor player={p} allTags={collectTags(players)} readOnly={!privileged} />
+              {privileged && <RolesEditor player={p} />}
               {privileged && <MmrEditor player={p} />}
               {privileged && <DiscordUnlink player={p} />}
             </div>

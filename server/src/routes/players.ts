@@ -254,6 +254,35 @@ playersRouter.patch(
   }),
 );
 
+const rolesSchema = z
+  .object({
+    rolesPlayed: z.number().int().min(1).max(5).optional(),
+    champPool: z.enum(['one-trick', 'limited', 'diverse']).optional(),
+  })
+  .refine((d) => d.rolesPlayed !== undefined || d.champPool !== undefined, {
+    message: 'Provide rolesPlayed and/or champPool.',
+  });
+
+/**
+ * PATCH /api/players/:id/roles — set a player's versatility: how many roles they
+ * cover (5 = full flex … 1 = -100) and their champion-pool depth (one-trick =
+ * -100, limited = -50, diverse = 0). The penalties stack and affect team
+ * balancing only; raw MMR and Elo are untouched.
+ */
+playersRouter.patch(
+  '/:id/roles',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const body = rolesSchema.parse(req.body);
+    const player = await Player.findById(req.params.id).exec();
+    if (!player) throw new ApiError(404, 'Player not found.');
+    if (body.rolesPlayed !== undefined) player.rolesPlayed = body.rolesPlayed;
+    if (body.champPool !== undefined) player.champPool = body.champPool;
+    await player.save();
+    res.json({ player: player.toPublic() });
+  }),
+);
+
 const discordLinkSchema = z.object({
   discordUserId: z.string().min(1).max(32).nullable(),
 });

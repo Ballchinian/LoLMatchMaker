@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { Player } from '../models/Player';
 import { balanceTeams, type BalancePlayer } from '../services/balance';
+import { effectiveMMR } from '../services/mmr';
 import { ApiError, asyncHandler } from '../middleware/errors';
 
 export const teamsRouter = Router();
@@ -41,9 +42,11 @@ teamsRouter.post(
       throw new ApiError(404, 'One or more selected players were not found.');
     }
 
+    // Balance on matchmaking value: raw MMR minus the versatility penalties
+    // (role coverage + champion-pool depth).
     const balancePlayers: BalancePlayer[] = players.map((p) => ({
       id: p._id.toString(),
-      mmr: p.mmr,
+      mmr: effectiveMMR(p.mmr, p.rolesPlayed, p.champPool),
     }));
 
     const result = balanceTeams(balancePlayers, {

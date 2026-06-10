@@ -6,8 +6,10 @@
  *   - sameTeam[a,b]      : a and b must end up on the SAME team
  *   - oppositeTeam[a,b]  : a and b must end up on OPPOSITE teams
  *
- * "Fairness" = absolute difference of the two teams' AVERAGE MMR (averages, not
- * sums, so uneven team sizes are handled correctly). Lower is fairer.
+ * "Fairness" = absolute difference of the two teams' AVERAGE MMR, where BOTH
+ * averages divide by the LARGER team's size (e.g. a 6v3 lobby divides both
+ * totals by 6). The short-handed team is rated as if its missing seats were
+ * worth 0, so it isn't treated as the equal of a full team. Lower is fairer.
  *
  * For up to EXACT_LIMIT players we enumerate every partition exhaustively (cheap:
  * C(9,4)=126 partitions for a 10-player lobby), so the result is provably optimal.
@@ -173,8 +175,11 @@ export function balanceTeams(players: BalancePlayer[], options: BalanceOptions =
       if (seen.has(key)) continue; // guards the floor/ceil overlap edge cases
       seen.add(key);
 
-      const avgA = totalA / teamA.length;
-      const avgB = totalB / teamB.length;
+      // Both teams divide by the larger team's size (uneven lobbies aren't
+      // averaged independently — see header comment).
+      const divisor = Math.max(teamA.length, teamB.length);
+      const avgA = totalA / divisor;
+      const avgB = totalB / divisor;
       all.push({
         teamA,
         teamB,

@@ -1,5 +1,6 @@
 import { Schema, model, type Model, type HydratedDocument } from 'mongoose';
 import { mmrToRank, formatRank, type Tier, type Division } from '../services/rank';
+import { CHAMP_POOLS, MAX_ROLES, effectiveMMR, flexPenalty, type ChampPool } from '../services/mmr';
 
 /**
  * A Player is append-only once injected:
@@ -47,6 +48,10 @@ export interface PlayerAttrs {
   gamesPlayed: number;
   /** Mutable, free-form organizational labels (e.g. "smurfs", "office", "jungle mains"). */
   tags: string[];
+  /** How many of the 5 roles this player can play at their elo (1–5). */
+  rolesPlayed: number;
+  /** Champion-pool depth: a one-trick is ban-able in tournaments regardless of role coverage. */
+  champPool: ChampPool;
   /** Discord user id linked to this player (for the bot to map voice members). */
   discordUserId?: string;
 }
@@ -66,6 +71,12 @@ export interface PublicPlayer {
   losses: number;
   gamesPlayed: number;
   tags: string[];
+  rolesPlayed: number;
+  champPool: ChampPool;
+  /** Combined penalty: limited role coverage + shallow champion pool (0–200). */
+  flexPenalty: number;
+  /** Matchmaking value: mmr - flexPenalty. Used for team balancing. */
+  effectiveMmr: number;
   discordUserId?: string;
   rank: {
     tier: Tier;
@@ -136,6 +147,11 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     // Mutable organizational labels — NOT part of the immutable identity.
     tags: { type: [String], default: [] },
 
+    // Versatility (admin-set, mutable). Roles: 5 = no penalty, 1 = -100 matchmaking
+    // value. Champ pool: one-trick = -100, limited = -50, diverse = 0. They stack.
+    rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: MAX_ROLES },
+    champPool: { type: String, enum: CHAMP_POOLS, default: 'diverse' },
+
     // Discord link (one Discord account ↔ one player). Mutable.
     discordUserId: { type: String, index: { unique: true, sparse: true } },
   },
@@ -155,6 +171,10 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     losses: this.losses,
     gamesPlayed: this.gamesPlayed,
     tags: this.tags ?? [],
+    rolesPlayed: this.rolesPlayed ?? MAX_ROLES,
+    champPool: this.champPool ?? 'diverse',
+    flexPenalty: flexPenalty(this.rolesPlayed, this.champPool),
+    effectiveMmr: effectiveMMR(this.mmr, this.rolesPlayed, this.champPool),
     discordUserId: this.discordUserId,
     rank: {
       tier: rank.tier,

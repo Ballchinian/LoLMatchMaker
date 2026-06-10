@@ -8,7 +8,7 @@ import { useAuth } from '../store/useAuth';
  * (writeProtection off — no tokens configured).
  */
 export function usePrivileged(): boolean {
-  const actor = useAuth((s) => s.actor);
-  const { data } = useQuery({ queryKey: ['health'], queryFn: getHealth, staleTime: 30_000 });
-  return actor !== null || data?.writeProtection === 'off';
+    const actor = useAuth((s) => s.actor);
+    const { data } = useQuery({ queryKey: ['health'], queryFn: getHealth, staleTime: 30_000 });
+    return actor !== null || data?.writeProtection === 'off';
 }

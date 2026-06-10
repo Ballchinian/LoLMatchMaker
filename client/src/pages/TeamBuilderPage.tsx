@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage, balanceTeams, createMatch, getPlayers } from '../api/client';
 import type { Player } from '../api/types';
@@ -14,6 +14,14 @@ interface Assignment {
   b: string[];
 }
 
+/** Live pointer-drag state (only set once the press moves past the threshold). */
+interface DragState {
+  id: string;
+  x: number;
+  y: number;
+  over: Side | null;
+}
+
 const btnPrimary =
   'rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50';
 const btnGhost =
@@ -25,6 +33,21 @@ function Card({ children, className = '' }: { children: ReactNode; className?: s
   return (
     <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
   );
+}
+
+/** A player's matchmaking value (MMR minus versatility penalty) for display. */
+function Value({ player }: { player: Player }) {
+  if (player.flexPenalty > 0) {
+    return (
+      <span
+        className="w-12 text-right font-semibold text-amber-300"
+        title={`MMR ${player.mmr} − ${player.flexPenalty} versatility penalty`}
+      >
+        {player.effectiveMmr}
+      </span>
+    );
+  }
+  return <span className="w-12 text-right font-semibold text-indigo-300">{player.effectiveMmr}</span>;
 }
 
 /* --------------------------- Player picker ----------------------------- */
@@ -91,7 +114,7 @@ function PlayerPicker({ players }: { players: Player[] }) {
                 )}
               </span>
               <RankBadge rank={p.rank} size="sm" />
-              <span className="w-12 text-right font-semibold text-indigo-300">{p.mmr}</span>
+              <Value player={p} />
             </button>
           );
         })}
@@ -195,33 +218,47 @@ function Chip({
 
 /* ------------------------------ Team view ------------------------------ */
 
-function avgOf(ids: string[], byId: Map<string, Player>): number {
-  if (ids.length === 0) return 0;
-  return Math.round(ids.reduce((s, id) => s + (byId.get(id)?.mmr ?? 0), 0) / ids.length);
+function totalOf(ids: string[], byId: Map<string, Player>): number {
+  return ids.reduce((s, id) => s + (byId.get(id)?.effectiveMmr ?? 0), 0);
 }
 
 function TeamPanel({
   label,
   side,
   ids,
+  avg,
   byId,
   highlight,
+  dragId,
+  dropActive,
+  zoneRef,
+  onGrab,
   onMove,
 }: {
   label: string;
   side: 'a' | 'b';
   ids: string[];
+  avg: number;
   byId: Map<string, Player>;
   highlight: string;
+  dragId: string | null;
+  dropActive: boolean;
+  zoneRef: React.RefObject<HTMLDivElement | null>;
+  onGrab: (e: React.PointerEvent, id: string, from: Side) => void;
   onMove: (id: string, target: Side) => void;
 }) {
   const other: Side = side === 'a' ? 'b' : 'a';
   return (
-    <div className={`flex-1 rounded-xl border ${highlight} bg-slate-950/40 p-4`}>
+    <div
+      ref={zoneRef}
+      className={`flex-1 rounded-xl border ${highlight} bg-slate-950/40 p-4 transition ${
+        dropActive ? 'ring-2 ring-indigo-400/70 bg-indigo-500/10' : ''
+      }`}
+    >
       <div className="mb-3 flex items-center justify-between">
         <h4 className="font-bold text-white">{label}</h4>
         <span className="text-xs text-slate-400">
-          {ids.length} · avg <span className="font-bold text-indigo-300">{avgOf(ids, byId)}</span>
+          {ids.length} · avg <span className="font-bold text-indigo-300">{avg}</span>
         </span>
       </div>
       <ul className="space-y-1.5">
@@ -229,13 +266,21 @@ function TeamPanel({
           const p = byId.get(id);
           if (!p) return null;
           return (
-            <li key={id} className="flex items-center gap-2 rounded-lg bg-slate-900/50 px-2 py-1.5">
+            <li
+              key={id}
+              onPointerDown={(e) => onGrab(e, id, side)}
+              title="Drag to a team or the bench · click to send to bench"
+              className={`flex cursor-grab select-none touch-none items-center gap-2 rounded-lg bg-slate-900/50 px-2 py-1.5 ${
+                dragId === id ? 'opacity-30' : ''
+              }`}
+            >
               <span className="flex-1 truncate text-sm text-slate-200">{p.displayName}</span>
               <RankBadge rank={p.rank} size="sm" />
-              <span className="w-10 text-right text-sm font-semibold text-indigo-300">{p.mmr}</span>
+              <Value player={p} />
               <button
                 className="rounded border border-slate-700 px-1.5 text-xs text-slate-400 hover:text-white"
                 title={`Move to ${other === 'a' ? 'Team A' : 'Team B'}`}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onMove(id, other)}
               >
                 ⇄
@@ -243,6 +288,7 @@ function TeamPanel({
               <button
                 className="rounded border border-slate-700 px-1.5 text-xs text-slate-400 hover:text-white"
                 title="Send to bench"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={() => onMove(id, 'bench')}
               >
                 ↧
@@ -250,7 +296,7 @@ function TeamPanel({
             </li>
           );
         })}
-        {ids.length === 0 && <li className="px-1 py-2 text-xs text-slate-600">empty</li>}
+        {ids.length === 0 && <li className="px-1 py-2 text-xs text-slate-600">empty — drop players here</li>}
       </ul>
     </div>
   );
@@ -259,33 +305,65 @@ function TeamPanel({
 function Bench({
   ids,
   byId,
+  dragId,
+  dropActive,
+  zoneRef,
+  onGrab,
   onMove,
 }: {
   ids: string[];
   byId: Map<string, Player>;
+  dragId: string | null;
+  dropActive: boolean;
+  zoneRef: React.RefObject<HTMLDivElement | null>;
+  onGrab: (e: React.PointerEvent, id: string, from: Side) => void;
   onMove: (id: string, target: Side) => void;
 }) {
-  if (ids.length === 0) return null;
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-950/30 p-3">
+    <div
+      ref={zoneRef}
+      className={`rounded-xl border border-slate-800 bg-slate-950/30 p-3 transition ${
+        dropActive ? 'ring-2 ring-indigo-400/70 bg-indigo-500/10' : ''
+      }`}
+    >
       <p className="mb-2 text-xs uppercase tracking-wide text-slate-500">Bench ({ids.length})</p>
       <div className="flex flex-wrap gap-2">
         {ids.map((id) => {
           const p = byId.get(id);
           if (!p) return null;
           return (
-            <span key={id} className="inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs">
+            <span
+              key={id}
+              onPointerDown={(e) => onGrab(e, id, 'bench')}
+              title="Drag to a team · click to unselect"
+              className={`inline-flex cursor-grab select-none touch-none items-center gap-2 rounded-full border border-slate-700 bg-slate-900/60 px-2.5 py-1 text-xs ${
+                dragId === id ? 'opacity-30' : ''
+              }`}
+            >
               <span className="text-slate-200">{p.displayName}</span>
-              <span className="text-indigo-300">{p.mmr}</span>
-              <button className="text-sky-400 hover:text-sky-300" onClick={() => onMove(id, 'a')} title="To Team A">
+              <span className={p.flexPenalty > 0 ? 'text-amber-300' : 'text-indigo-300'}>
+                {p.effectiveMmr}
+              </span>
+              <button
+                className="text-sky-400 hover:text-sky-300"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onMove(id, 'a')}
+                title="To Team A"
+              >
                 →A
               </button>
-              <button className="text-rose-400 hover:text-rose-300" onClick={() => onMove(id, 'b')} title="To Team B">
+              <button
+                className="text-rose-400 hover:text-rose-300"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={() => onMove(id, 'b')}
+                title="To Team B"
+              >
                 →B
               </button>
             </span>
           );
         })}
+        {ids.length === 0 && <span className="text-xs text-slate-600">empty — drop players here to bench them</span>}
       </div>
     </div>
   );
@@ -297,7 +375,7 @@ export default function TeamBuilderPage() {
   const qc = useQueryClient();
   const privileged = usePrivileged();
   const { data: players } = useQuery({ queryKey: ['players'], queryFn: getPlayers });
-  const { selectedIds, sameTeam, oppositeTeam, excludeKeys, addExcludeKey, resetExcludeKeys } =
+  const { selectedIds, toggle, sameTeam, oppositeTeam, excludeKeys, addExcludeKey, resetExcludeKeys } =
     useSelection();
 
   const [assign, setAssign] = useState<Assignment>({ a: [], b: [] });
@@ -306,6 +384,12 @@ export default function TeamBuilderPage() {
   // Public-submission fields (reporter's name + the winner they claim).
   const [reportedBy, setReportedBy] = useState('');
   const [proposed, setProposed] = useState<'A' | 'B' | ''>('');
+
+  // Press-hold-drag state. Zones are hit-tested against these refs.
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const zoneA = useRef<HTMLDivElement | null>(null);
+  const zoneB = useRef<HTMLDivElement | null>(null);
+  const zoneBench = useRef<HTMLDivElement | null>(null);
 
   const byId = useMemo(() => new Map((players ?? []).map((p) => [p.id, p])), [players]);
 
@@ -330,6 +414,60 @@ export default function TeamBuilderPage() {
       if (target === 'b') b.push(id);
       return { a, b };
     });
+
+  const zoneAt = (x: number, y: number): Side | null => {
+    const zones: [Side, HTMLDivElement | null][] = [
+      ['a', zoneA.current],
+      ['b', zoneB.current],
+      ['bench', zoneBench.current],
+    ];
+    for (const [side, el] of zones) {
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return side;
+    }
+    return null;
+  };
+
+  /**
+   * Press, hold & drag: past a small threshold the player is "picked up" (ghost
+   * follows the pointer) and can be dropped on Team A / Team B / the bench.
+   * A plain click instead sends a team player to the bench, or unselects a
+   * bench player entirely. Row buttons stop propagation, so they win.
+   */
+  const onGrab = (e: React.PointerEvent, id: string, from: Side) => {
+    if (e.button !== 0 && e.pointerType === 'mouse') return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    let started = false;
+
+    const onPointerMove = (ev: PointerEvent) => {
+      if (!started && Math.hypot(ev.clientX - startX, ev.clientY - startY) > 6) started = true;
+      if (started) {
+        setDrag({ id, x: ev.clientX, y: ev.clientY, over: zoneAt(ev.clientX, ev.clientY) });
+      }
+    };
+    const onPointerUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+      setDrag(null);
+      if (ev.type === 'pointercancel') return;
+      if (started) {
+        const over = zoneAt(ev.clientX, ev.clientY);
+        if (over) moveTo(id, over);
+      } else if (from === 'bench') {
+        toggle(id); // unselect from "Pick players" (and therefore the bench)
+      } else {
+        moveTo(id, 'bench');
+      }
+    };
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+  };
 
   const balance = useMutation({
     mutationFn: (exclude: string[]) =>
@@ -376,7 +514,15 @@ export default function TeamBuilderPage() {
 
   const canBalance = selectedIds.length >= 2;
   const teamsReady = assign.a.length > 0 && assign.b.length > 0;
-  const gap = Math.abs(avgOf(assign.a, byId) - avgOf(assign.b, byId));
+
+  // Both teams' averages divide by the LARGER team's size, matching the server
+  // (a short-handed team isn't rated as the equal of a full one).
+  const divisor = Math.max(assign.a.length, assign.b.length, 1);
+  const avgA = Math.round(totalOf(assign.a, byId) / divisor);
+  const avgB = Math.round(totalOf(assign.b, byId) / divisor);
+  const gap = Math.abs(avgA - avgB);
+
+  const dragPlayer = drag ? byId.get(drag.id) : null;
 
   const generate = () => {
     resetExcludeKeys();
@@ -408,8 +554,9 @@ export default function TeamBuilderPage() {
             {!canBalance && <span className="text-sm text-slate-500">Pick at least 2 players.</span>}
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Auto-balance fills the teams fairly; then drag players between sides with ⇄ / ↧ / →A / →B to
-            build a custom matchup.
+            Auto-balance fills the teams fairly; then drag players between the team boxes and the bench
+            (click a team player to bench them, click a bench player to unselect them). The ⇄ / ↧ / →A /
+            →B buttons still work too.
           </p>
           {notice && <p className="mt-2 text-sm text-amber-300">{notice}</p>}
         </Card>
@@ -431,12 +578,44 @@ export default function TeamBuilderPage() {
             </div>
 
             <div className="flex flex-col gap-3 sm:flex-row">
-              <TeamPanel label="Team A" side="a" ids={assign.a} byId={byId} highlight="border-sky-700/40" onMove={moveTo} />
-              <TeamPanel label="Team B" side="b" ids={assign.b} byId={byId} highlight="border-rose-700/40" onMove={moveTo} />
+              <TeamPanel
+                label="Team A"
+                side="a"
+                ids={assign.a}
+                avg={avgA}
+                byId={byId}
+                highlight="border-sky-700/40"
+                dragId={drag?.id ?? null}
+                dropActive={drag?.over === 'a'}
+                zoneRef={zoneA}
+                onGrab={onGrab}
+                onMove={moveTo}
+              />
+              <TeamPanel
+                label="Team B"
+                side="b"
+                ids={assign.b}
+                avg={avgB}
+                byId={byId}
+                highlight="border-rose-700/40"
+                dragId={drag?.id ?? null}
+                dropActive={drag?.over === 'b'}
+                zoneRef={zoneB}
+                onGrab={onGrab}
+                onMove={moveTo}
+              />
             </div>
 
             <div className="mt-3">
-              <Bench ids={bench} byId={byId} onMove={moveTo} />
+              <Bench
+                ids={bench}
+                byId={byId}
+                dragId={drag?.id ?? null}
+                dropActive={drag?.over === 'bench'}
+                zoneRef={zoneBench}
+                onGrab={onGrab}
+                onMove={moveTo}
+              />
             </div>
 
             {privileged ? (
@@ -501,6 +680,19 @@ export default function TeamBuilderPage() {
           </Card>
         )}
       </div>
+
+      {/* Floating ghost of the player being dragged. */}
+      {drag && dragPlayer && (
+        <div
+          className="pointer-events-none fixed z-50 flex items-center gap-2 rounded-full border border-indigo-400 bg-slate-900 px-3 py-1.5 text-sm shadow-lg shadow-indigo-950/50"
+          style={{ left: drag.x + 10, top: drag.y + 10 }}
+        >
+          <span className="font-medium text-white">{dragPlayer.displayName}</span>
+          <span className={dragPlayer.flexPenalty > 0 ? 'text-amber-300' : 'text-indigo-300'}>
+            {dragPlayer.effectiveMmr}
+          </span>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,51 +4,68 @@ import { commandMap } from './commands/index';
 import { registerGuildCommands } from './discord/registerCommands';
 
 const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildMembers,
-  ],
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildVoiceStates,
+        GatewayIntentBits.GuildMembers,
+    ],
 });
 
 client.once(Events.ClientReady, async (c) => {
-  console.log(`[bot] logged in as ${c.user.tag}`);
-  try {
-    const n = await registerGuildCommands();
-    console.log(`[bot] registered ${n} slash command(s)`);
-  } catch (err) {
-    console.error('[bot] command registration failed:', err);
-  }
+    console.log(`[bot] logged in as ${c.user.tag}`);
+    try {
+        const n = await registerGuildCommands();
+        console.log(`[bot] registered ${n} slash command(s)`);
+    } catch (err) {
+        console.error('[bot] command registration failed:', err);
+    }
 });
 
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (interaction.isAutocomplete()) {
-    const cmd = commandMap.get(interaction.commandName);
-    if (cmd?.autocomplete) {
-      try {
-        await cmd.autocomplete(interaction);
-      } catch (err) {
-        console.error('[autocomplete]', err);
-      }
-    }
-    return;
-  }
+/**
+ * Discord error 10062 "Unknown interaction": the 3-second ack window expired
+ * (slow/cold API, or another bot instance with this token already answered).
+ * There is nothing left to reply to, so don't try — just note it briefly.
+ */
+function isUnknownInteraction(err: unknown): boolean {
+    return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 10062;
+}
 
-  if (interaction.isChatInputCommand()) {
-    const cmd = commandMap.get(interaction.commandName);
-    if (!cmd) return;
-    try {
-      await cmd.execute(interaction);
-    } catch (err) {
-      console.error('[command]', err);
-      const content = `❌ ${(err as Error).message}`;
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply(content).catch(() => undefined);
-      } else {
-        await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => undefined);
-      }
+client.on(Events.InteractionCreate, async (interaction) => {
+    if (interaction.isAutocomplete()) {
+        const cmd = commandMap.get(interaction.commandName);
+        if (cmd?.autocomplete) {
+        try {
+            await cmd.autocomplete(interaction);
+        } catch (err) {
+            if (isUnknownInteraction(err)) {
+                console.warn('[autocomplete] interaction expired before we could respond (slow API or duplicate bot instance)');
+            } else {
+                console.error('[autocomplete]', err);
+            }
+        }
+        }
+        return;
     }
-  }
+
+    if (interaction.isChatInputCommand()) {
+        const cmd = commandMap.get(interaction.commandName);
+        if (!cmd) return;
+        try {
+        await cmd.execute(interaction);
+        } catch (err) {
+        if (isUnknownInteraction(err)) {
+            console.warn('[command] interaction expired before we could respond (slow API or duplicate bot instance)');
+            return;
+        }
+        console.error('[command]', err);
+        const content = `❌ ${(err as Error).message}`;
+        if (interaction.deferred || interaction.replied) {
+            await interaction.editReply(content).catch(() => undefined);
+        } else {
+            await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => undefined);
+        }
+        }
+    }
 });
 
 client.login(config.DISCORD_TOKEN);
