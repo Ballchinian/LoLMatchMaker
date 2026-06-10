@@ -31,6 +31,9 @@ import { config } from '../config';
 /** How long an approval vote stays open. */
 const POLL_DURATION_MS = 10 * 60_000;
 
+/** How long a resolved poll (and its match-chat thread) stays visible before self-deleting. */
+const POLL_CLEANUP_MS = 10 * 60_000;
+
 /**
  * Votes needed to approve/reject a non-admin request: a strict majority of the
  * voters who can actually vote (the lobby's LINKED players), so one team alone
@@ -343,12 +346,14 @@ export const match: Command = {
         const desc = actionDescription(sub, label, winner);
         const mentions = [...eligible].map((id) => `<@${id}>`).join(' ');
 
-        const poll = await channel.send({
-            content:
+        const baseContent =
             `🗳️ <@${interaction.user.id}> wants to ${desc}.\n` +
             `${mentions} — vote with the buttons below. ` +
             `**${votesNeeded}** of the lobby's **${eligible.size}** linked player(s) either way decides ` +
-            `(expires in ${POLL_DURATION_MS / 60_000} min). Click your vote again to withdraw it.`,
+            `(expires in ${POLL_DURATION_MS / 60_000} min). Click your vote again to withdraw it.`;
+
+        const poll = await channel.send({
+            content: baseContent,
             components: [voteRow(0, 0, votesNeeded)],
         });
         activeVotes.set(matchId, sub);
@@ -365,6 +370,13 @@ export const match: Command = {
 
         const upVoters = new Set<string>();
         const downVoters = new Set<string>();
+
+        // "Who has voted" footer (participation only — not which way they voted).
+        const votedLine = () => {
+            const voters = [...upVoters, ...downVoters];
+            if (voters.length === 0) return '';
+            return `\n\n☑️ Voted (${voters.length}/${eligible.size}): ${voters.map((id) => `<@${id}>`).join(' ')}`;
+        };
 
         const collector = poll.createMessageComponentCollector({
             componentType: ComponentType.Button,
@@ -383,17 +395,27 @@ export const match: Command = {
             }
 
             // One vote per player: clicking the other button switches, re-clicking withdraws.
-            if (btn.customId === 'vote-approve') {
-            downVoters.delete(btn.user.id);
-            upVoters.has(btn.user.id) ? upVoters.delete(btn.user.id) : upVoters.add(btn.user.id);
-            } else {
-            upVoters.delete(btn.user.id);
-            downVoters.has(btn.user.id) ? downVoters.delete(btn.user.id) : downVoters.add(btn.user.id);
-            }
+            const side = btn.customId === 'vote-approve' ? 'approve' : 'reject';
+            const mine = side === 'approve' ? upVoters : downVoters;
+            const other = side === 'approve' ? downVoters : upVoters;
+            const switched = other.delete(btn.user.id);
+            const withdrew = !switched && mine.has(btn.user.id);
+            withdrew ? mine.delete(btn.user.id) : mine.add(btn.user.id);
 
             await btn
-            .update({ components: [voteRow(upVoters.size, downVoters.size, votesNeeded)] })
+            .update({
+                content: baseContent + votedLine(),
+                components: [voteRow(upVoters.size, downVoters.size, votesNeeded)],
+            })
             .catch(() => undefined);
+
+            // Private receipt so there's no doubt YOUR click registered.
+            const receipt = withdrew
+            ? '↩️ Your vote was withdrawn.'
+            : switched
+                ? `🔄 Switched — you now vote to **${side}**.`
+                : `☑️ Vote recorded — you voted to **${side}**. Click the same button again to withdraw.`;
+            await btn.followUp({ content: receipt, flags: MessageFlags.Ephemeral }).catch(() => undefined);
 
             if (upVoters.size >= votesNeeded) collector.stop('approved');
             else if (downVoters.size >= votesNeeded) collector.stop('rejected');
@@ -438,11 +460,16 @@ export const match: Command = {
                 })
                 .catch(() => undefined);
             } finally {
-            // Vote is over — freeze the match chat.
+            // Vote is over — freeze the match chat, then clean both up after a
+            // grace period so the channel doesn't accumulate dead polls.
             if (thread) {
                 await thread.setLocked(true).catch(() => undefined);
                 await thread.setArchived(true).catch(() => undefined);
             }
+            setTimeout(() => {
+                void thread?.delete().catch(() => undefined);
+                void poll.delete().catch(() => undefined);
+            }, POLL_CLEANUP_MS);
             }
         });
     },
