@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder, type Guild } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder, ThreadAutoArchiveDuration, type Guild } from 'discord.js';
 import type { Command } from './types';
 import {
     apiConfirmMatch,
@@ -216,6 +216,14 @@ export const match: Command = {
         );
         await poll.react('👍');
         await poll.react('👎');
+        // Match chat: the commands channel itself is typing-locked, so give the
+        // lobby a thread to discuss the vote. Locked once the vote resolves.
+        const thread = await poll
+            .startThread({
+            name: `🗳️ ${label} — match chat`,
+            autoArchiveDuration: ThreadAutoArchiveDuration.OneHour,
+            })
+            .catch(() => null);
         await interaction.editReply(`🗳️ Vote opened for ${label} — ${votesNeeded} 👍 and the match starts.`);
 
         // Only the lobby's (linked) players may vote, one vote each. We track
@@ -287,6 +295,12 @@ export const match: Command = {
             } catch (err) {
             console.error('[match vote]', err);
             await poll.edit(`❌ Vote passed but setup failed: ${(err as Error).message}`).catch(() => undefined);
+            } finally {
+            // Vote is over — freeze the match chat.
+            if (thread) {
+                await thread.setLocked(true).catch(() => undefined);
+                await thread.setArchived(true).catch(() => undefined);
+            }
             }
         });
         return;

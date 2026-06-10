@@ -1,4 +1,4 @@
-import { Client, Events, GatewayIntentBits, MessageFlags } from 'discord.js';
+import { ChannelType, Client, Events, GatewayIntentBits, MessageFlags, type Guild } from 'discord.js';
 import { config } from './config';
 import { commandMap } from './commands/index';
 import { registerGuildCommands } from './discord/registerCommands';
@@ -12,8 +12,19 @@ const client = new Client({
         GatewayIntentBits.GuildMembers,
         // Needed for the /match setup approval polls (👍/👎 reaction counting).
         GatewayIntentBits.GuildMessageReactions,
+        // Needed to auto-delete normal messages in the commands channel.
+        GatewayIntentBits.GuildMessages,
     ],
 });
+
+/** The commands channel, if it exists. Commands only work there; chat doesn't. */
+function commandsChannelId(guild: Guild | null): string | null {
+    if (!guild) return null;
+    const ch = guild.channels.cache.find(
+        (c) => c.type === ChannelType.GuildText && c.name === config.COMMANDS_CHANNEL_NAME,
+    );
+    return ch?.id ?? null;
+}
 
 /** How often to check for channels whose match was cancelled/confirmed via the webpage. */
 const SWEEP_INTERVAL_MS = 60_000;
@@ -66,8 +77,24 @@ function isUnknownInteraction(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 10062;
 }
 
+// Keep the commands channel command-only: anything that isn't from this bot
+// (chatter, stray bot messages) is removed so votes/notices never get buried.
+client.on(Events.MessageCreate, async (message) => {
+    if (!message.inGuild() || message.author.id === client.user?.id) return;
+    if (message.channelId !== commandsChannelId(message.guild)) return;
+    await message.delete().catch(() => undefined);
+});
+
 client.on(Events.InteractionCreate, async (interaction) => {
+    // All commands live in the commands channel (until /setup creates it, anywhere goes).
+    const required = commandsChannelId(interaction.guild);
+    const wrongChannel = required !== null && interaction.channelId !== required;
+
     if (interaction.isAutocomplete()) {
+        if (wrongChannel) {
+        await interaction.respond([]).catch(() => undefined);
+        return;
+        }
         const cmd = commandMap.get(interaction.commandName);
         if (cmd?.autocomplete) {
         try {
@@ -84,6 +111,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
     }
 
     if (interaction.isChatInputCommand()) {
+        if (wrongChannel) {
+        await interaction
+            .reply({ content: `❌ Commands only work in <#${required}>.`, flags: MessageFlags.Ephemeral })
+            .catch(() => undefined);
+        return;
+        }
         const cmd = commandMap.get(interaction.commandName);
         if (!cmd) return;
         try {

@@ -10,13 +10,20 @@ const schema = z.object({
     INHOUSE_CATEGORY: z.string().default('Inhouse'),
     LOBBY_CHANNEL_ID: z.string().optional().default(''),
 
-    // Role granted on /link that gates access to the server (everything but #signup).
+    // Role granted on /link that gates access to the server (everything but the commands channel).
     LINKED_ROLE_NAME: z.string().default('Linked'),
-    // Text channel where unlinked members run /link.
-    SIGNUP_CHANNEL_NAME: z.string().default('signup'),
+    // The commands channel: where members run /link AND every other slash command.
+    // Normal messages are blocked/auto-deleted there; commands are rejected elsewhere.
+    COMMANDS_CHANNEL_NAME: z.string().optional(),
+    // Deprecated alias for COMMANDS_CHANNEL_NAME (kept so older .envs keep working).
 
-    API_BASE_URL: z.string().url().default('http://localhost:4000/api'),
+    API_BASE_URL: z.url().default('http://localhost:4000/api'),
     BOT_TOKEN: z.string().min(1, 'BOT_TOKEN is required (must match the backend)'),
 });
 
-export const config = schema.parse(process.env);
+const parsed = schema.parse(process.env);
+
+export const config = {
+    ...parsed,
+    COMMANDS_CHANNEL_NAME: parsed.COMMANDS_CHANNEL_NAME ?? 'commands',
+};
