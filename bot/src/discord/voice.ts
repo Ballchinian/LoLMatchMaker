@@ -18,6 +18,28 @@ export async function ensureCategory(guild: Guild): Promise<CategoryChannel> {
     return guild.channels.create({ name: config.INHOUSE_CATEGORY, type: ChannelType.GuildCategory });
 }
 
+//Find the persistent Lobby voice channel by name (null if it doesn't exist yet)
+export function findLobbyChannel(guild: Guild): VoiceChannel | null {
+    return (
+        guild.channels.cache.find(
+            (c): c is VoiceChannel => c.type === ChannelType.GuildVoice && c.name === config.LOBBY_CHANNEL_NAME,
+        ) ?? null
+    );
+}
+
+//Find or create the Lobby voice channel (lives in the inhouse category)
+export async function ensureLobbyChannel(guild: Guild): Promise<VoiceChannel> {
+    const existing = findLobbyChannel(guild);
+    if (existing) return existing;
+    const category = await ensureCategory(guild);
+    return guild.channels.create({
+        name: config.LOBBY_CHANNEL_NAME,
+        type: ChannelType.GuildVoice,
+        parent: category.id,
+        reason: 'Match Maker lobby channel',
+    });
+}
+
 //@everyone can't connect; only the listed members can. The bot keeps full access to its own channels.
 function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolvable[] {
     
@@ -174,9 +196,10 @@ export async function sweepOrphanedChannels(
     });
     if (orphaned.length === 0) return 0;
 
-    if (config.LOBBY_CHANNEL_ID) {
+    const lobby = findLobbyChannel(guild);
+    if (lobby) {
         for (const ch of orphaned) {
-        await moveMembers(guild, [...ch.members.keys()], config.LOBBY_CHANNEL_ID);
+        await moveMembers(guild, [...ch.members.keys()], lobby.id);
         }
     }
     const { deleted } = await deleteChannels(

@@ -4,11 +4,11 @@ import {
     createMatchChannels,
     deleteChannels,
     ensureCategory,
+    findLobbyChannel,
     findMatchChannels,
     moveMembers,
 } from '../discord/voice';
 import { syncMemberRoles } from '../discord/roles';
-import { config } from '../config';
 
 /*
     The actual /match actions (setup, split, confirm, cancel, join), separate
@@ -28,10 +28,11 @@ export function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>)
     return { linked, unlinked };
 }
 
-//Return players to Lobby (if configured) and delete the match's channels
+//Return players to Lobby (if it exists) and delete the match's channels
 async function teardown(guild: Guild, memberIds: string[], label: string) {
-    if (config.LOBBY_CHANNEL_ID) {
-        await moveMembers(guild, memberIds, config.LOBBY_CHANNEL_ID);
+    const lobby = findLobbyChannel(guild);
+    if (lobby) {
+        await moveMembers(guild, memberIds, lobby.id);
     }
     const found = findMatchChannels(guild, label);
     return deleteChannels(

@@ -6,11 +6,12 @@ const schema = z.object({
     DISCORD_CLIENT_ID: z.string().min(1, 'DISCORD_CLIENT_ID is required'),
     DISCORD_GUILD_ID: z.string().min(1, 'DISCORD_GUILD_ID is required'),
 
-    ADMIN_ROLE_ID: z.string().optional().default(''),
-    // Admin marker role created by /setup; holders count as bot admins (only when ADMIN_ROLE_ID is blank).
+    // Admin marker role created by /setup; holders count as bot admins. Per guild
+    // by design: the bot should work on any server it's invited to.
     ADMIN_ROLE_NAME: z.string().default('Match Admin'),
     INHOUSE_CATEGORY: z.string().default('Inhouse'),
-    LOBBY_CHANNEL_ID: z.string().optional().default(''),
+    // Persistent lobby voice channel, found by name (created by /setup if missing).
+    LOBBY_CHANNEL_NAME: z.string().default('Lobby'),
 
     // Role granted on /link that gates access to the server (everything but the commands channel).
     LINKED_ROLE_NAME: z.string().default('Linked'),

@@ -2,6 +2,7 @@ import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, ty
 import type { Command } from './types';
 import { isAdmin } from '../discord/guards';
 import { ensureAllRoles } from '../discord/roles';
+import { ensureLobbyChannel } from '../discord/voice';
 import { config } from '../config';
 
 //The info channel post: website, how to sign up, what the bot can do
@@ -41,8 +42,40 @@ export const setup: Command = {
         }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
+        /*
+            Everything /setup hands out in channel overwrites must be held by the
+            bot itself (Discord rejects the whole edit otherwise), so check up
+            front and name what's missing instead of a bare "Missing Permissions".
+        */
+        const required: Array<[bigint, string]> = [
+            [PermissionFlagsBits.ManageRoles, 'Manage Roles'],
+            [PermissionFlagsBits.ManageChannels, 'Manage Channels'],
+            [PermissionFlagsBits.ManageMessages, 'Manage Messages'],
+            [PermissionFlagsBits.ManageThreads, 'Manage Threads'],
+            [PermissionFlagsBits.CreatePublicThreads, 'Create Public Threads'],
+            [PermissionFlagsBits.SendMessages, 'Send Messages'],
+            [PermissionFlagsBits.SendMessagesInThreads, 'Send Messages in Threads'],
+            [PermissionFlagsBits.ReadMessageHistory, 'Read Message History'],
+            [PermissionFlagsBits.ViewChannel, 'View Channels'],
+            [PermissionFlagsBits.Connect, 'Connect'],
+            [PermissionFlagsBits.MoveMembers, 'Move Members'],
+        ];
+        const missing = required
+            .filter(([bit]) => !guild.members.me?.permissions.has(bit))
+            .map(([, name]) => name);
+        if (missing.length) {
+            await interaction.editReply(
+                `❌ I'm missing these permissions: **${missing.join(', ')}**.\n` +
+                `Server Settings → Roles → my role → enable them, then run /setup again.`,
+            );
+            return;
+        }
+
         //Linked role + the 10 tier roles (idempotent: existing roles are kept)
         await ensureAllRoles(guild);
+
+        //Persistent Lobby voice channel (players wait/return here between games)
+        await ensureLobbyChannel(guild);
 
         /*
             Commands-only channel: everyone can see it and use slash commands, but
@@ -147,7 +180,7 @@ export const setup: Command = {
         else await info.send(text);
 
         await interaction.editReply(
-        `✅ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, and **#${config.INFO_CHANNEL_NAME}** (website + signup + command guide).\n\n` +
+        `✅ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +
             `Give **${config.ADMIN_ROLE_NAME}** to anyone who should run admin commands without "Manage Server".\n\n` +
             `**#${config.COMMANDS_CHANNEL_NAME}** is the commands channel: slash commands ONLY work there (signup via /link included), ` +
             `normal messages are blocked/auto-deleted, and match votes are posted there so they can't get buried.\n\n` +

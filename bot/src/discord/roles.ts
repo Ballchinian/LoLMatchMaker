@@ -45,7 +45,8 @@ async function ensureRole(
     if (existing) return existing;
     return guild.roles.create({
         name,
-        color: opts.color,
+        //discord.js deprecated `color` in favour of the gradient capable `colors`
+        colors: opts.color !== undefined ? { primaryColor: opts.color } : undefined,
         permissions: opts.permissions ?? [],
         hoist: opts.hoist ?? false,
         reason: 'LoL Match Maker',

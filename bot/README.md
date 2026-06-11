@@ -13,7 +13,8 @@
    Open the generated URL and add it to your server. (Already invited with fewer perms? No
    re-invite needed: Server Settings → Roles → the bot's role → enable the missing ones.)
 5. Copy your **server id** (enable Developer Mode → right-click server → Copy ID) into `DISCORD_GUILD_ID`.
-6. Create a persistent **Lobby** voice channel; copy its id into `LOBBY_CHANNEL_ID`.
+
+Channels and roles need no manual creation — `/setup` makes them all, including the **Lobby** voice channel.
 
 ## Run
 
@@ -41,7 +42,7 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 | `/link player:<name> roles:<1-5> champs:<pool>` | anyone | link your Discord account (answering the two versatility questions) → unlocks the server + assigns your rank role |
 | `/update [roles] [champs]` | anyone | change your versatility answers later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
-| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, the commands channel, and a read-only info channel (website + signup + command guide) |
+| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (website + signup + command guide), and the Lobby voice channel |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin (non-admins trigger a lobby-majority 👍/👎 vote) | create the channels and send players straight to their team channels |
 | `/match split match:<pending>` | admin | move players (back) into their team channels |
@@ -89,7 +90,7 @@ The bot is a **worker** (connects out to Discord) — no port, domain, or health
    - `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`
    - `BOT_TOKEN` — **must match** the backend service's `BOT_TOKEN`
    - `API_BASE_URL` — your backend's public URL **incl. `/api`**, e.g. `https://your-app.up.railway.app/api`
-   - `LOBBY_CHANNEL_ID` (for returning players to Lobby), optional `ADMIN_ROLE_ID`/`ADMIN_ROLE_NAME`, `INHOUSE_CATEGORY`
+   - optional `ADMIN_ROLE_NAME`, `LOBBY_CHANNEL_NAME`, `INHOUSE_CATEGORY` (all have defaults)
 4. Deploy. The bot **auto-registers its slash commands on startup** — no separate step.
    Watch **Deploy Logs** for `logged in as …` and `registered N slash command(s)`.
 
