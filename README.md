@@ -1,3 +1,8 @@
+
+🔒 = requires admin/bot token.
+
+| Method | Path                          | Purpose                                       |
+| ------ | ----------------------------- | --------------------------------------------- |
 | GET    | `/api/health`                 | DB / Riot / write-protection status           |
 | GET    | `/api/auth/me`             🔒 | Validate a token, return the actor role        |
 | GET    | `/api/players`                | List players (strongest first)                |
