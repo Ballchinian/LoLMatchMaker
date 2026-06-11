@@ -7,8 +7,8 @@
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
 4. Invite the bot (OAuth2 → URL Generator): scopes **`bot`** + **`applications.commands`**;
    bot permissions **Manage Roles, Manage Channels, Manage Messages, Manage Threads,
-   Create Public Threads, Send Messages, Send Messages in Threads, View Channels, Connect,
-   Move Members** (permissions integer `326703787024`).
+   Create Public Threads, Send Messages, Send Messages in Threads, Read Message History,
+   View Channels, Connect, Move Members** (permissions integer `326703852560`).
    The bot can only hand out channel permissions it holds itself, so /setup FAILS without all of these.
    Open the generated URL and add it to your server. (Already invited with fewer perms? No
    re-invite needed: Server Settings → Roles → the bot's role → enable the missing ones.)
@@ -41,7 +41,7 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 | `/link player:<name> roles:<1-5> champs:<pool>` | anyone | link your Discord account (answering the two versatility questions) → unlocks the server + assigns your rank role |
 | `/update [roles] [champs]` | anyone | change your versatility answers later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
-| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, and the commands channel |
+| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, the commands channel, and a read-only info channel (website + signup + command guide) |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin (non-admins trigger a lobby-majority 👍/👎 vote) | create the channels and send players straight to their team channels |
 | `/match split match:<pending>` | admin | move players (back) into their team channels |
@@ -60,8 +60,9 @@ matching their website rank (Iron … Challenger) that stays in sync.
 One-time setup:
 1. Run **`/setup`** — creates the `Match Admin` role (give it to your admins; holders can run
    admin commands without "Manage Server"), the `Linked` role (with View Channels), the 10 tier
-   roles, and the commands channel visible to everyone (slash-commands-only: typing is
-   blocked/auto-deleted).
+   roles, the commands channel visible to everyone (slash-commands-only: typing is
+   blocked/auto-deleted), and a read-only `#info` channel where the bot posts the website link,
+   signup steps, and the command guide (re-running `/setup` refreshes that post).
 2. In **Server Settings → Roles → @everyone**, turn **OFF** "View Channels".
 3. Make sure the **bot's own role sits ABOVE all the rank roles** (Server Settings → Roles)
    so it can assign them.

@@ -19,6 +19,11 @@ const schema = z.object({
     COMMANDS_CHANNEL_NAME: z.string().optional(),
     // Deprecated alias for COMMANDS_CHANNEL_NAME (kept so older .envs keep working).
 
+    // Read-only info channel /setup creates: website link, signup steps, bot commands.
+    INFO_CHANNEL_NAME: z.string().default('info'),
+    // Public website URL shown in the info channel.
+    WEBSITE_URL: z.string().default('https://lolmatchmaker.netlify.app/build'),
+
     API_BASE_URL: z.url().default('http://localhost:4000/api'),
     BOT_TOKEN: z.string().min(1, 'BOT_TOKEN is required (must match the backend)'),
 });
