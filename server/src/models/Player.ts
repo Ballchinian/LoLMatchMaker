@@ -150,7 +150,7 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     // Versatility (mutable; set at /link signup or via /update / the admin UI).
     // Roles: 1 → -125 … 5 → +50. Champ pool: one-trick -200, two-trick -75,
     // diverse 0. They stack onto the displayed/balancing MMR; raw mmr drives ranks.
-    rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: MAX_ROLES },
+    rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: 3 },
     champPool: { type: String, enum: [...CHAMP_POOLS, 'limited'], default: 'diverse' },
 
     // Discord link (one Discord account ↔ one player). Mutable.
