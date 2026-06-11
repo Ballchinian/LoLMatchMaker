@@ -1,6 +1,7 @@
 import { Schema, model, type Model, type HydratedDocument } from 'mongoose';
 import { mmrToRank, formatRank, type Tier, type Division } from '../services/rank';
 import { CHAMP_POOLS, MAX_ROLES, effectiveMMR, versatilityModifier, type ChampPool } from '../services/mmr';
+import { currentRD } from '../services/glicko';
 
 /**
  * A Player is append-only once injected:
@@ -43,6 +44,14 @@ export interface PlayerAttrs {
   recent?: RecentSnapshot;
   seedMMR: number;
   mmr: number;
+  /**
+   * Glicko rating deviation — how unsure the system is about `mmr`. Set at
+   * injection from the seed curve, shrinks each game, grows with inactivity.
+   * Absent on players injected before Glicko; backfilled lazily from history.
+   */
+  rd?: number;
+  /** When this player last had a confirmed match (drives idle RD growth). */
+  lastMatchAt?: Date;
   wins: number;
   losses: number;
   gamesPlayed: number;
@@ -58,6 +67,11 @@ export interface PlayerAttrs {
 
 export interface PlayerMethods {
   toPublic(): PublicPlayer;
+  /**
+   * The RD this player would carry into a game right now: stored value
+   * (backfilled from seed + inhouse history when absent), inflated for idle time.
+   */
+  liveRD(now?: Date): number;
 }
 
 export interface PublicPlayer {
@@ -67,6 +81,8 @@ export interface PublicPlayer {
   region: string;
   seedMMR: number;
   mmr: number;
+  /** Current rating uncertainty (inflated for inactivity). Lower = more settled. */
+  rd: number;
   wins: number;
   losses: number;
   gamesPlayed: number;
@@ -134,10 +150,15 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     riot: { type: riotSnapshotSchema, immutable: true },
     recent: { type: recentSnapshotSchema, immutable: true },
 
-    // Starting MMR (set at injection); `mmr` is the live value that evolves via Elo.
+    // Starting MMR (set at injection); `mmr` is the live value that evolves via Glicko.
     // Both are admin-adjustable via PATCH /players/:id/mmr (identity stays immutable).
     seedMMR: { type: Number, required: true },
     mmr: { type: Number, required: true, index: true },
+
+    // Rating uncertainty + last confirmed game (no default: pre-Glicko players
+    // are backfilled lazily via currentRD until their first new match persists it).
+    rd: { type: Number, min: 0 },
+    lastMatchAt: { type: Date },
 
     // Live ladder record (this site's custom games).
     wins: { type: Number, default: 0 },
@@ -159,6 +180,21 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
   { timestamps: true },
 );
 
+playerSchema.methods.liveRD = function liveRD(this: PlayerDoc, now?: Date): number {
+  // Ranked games backing the frozen Riot rank snapshot; null = no rank data.
+  const riot = this.riot;
+  const hasRank = riot?.tier != null;
+  const seedGames = hasRank ? (riot?.wins ?? 0) + (riot?.losses ?? 0) : null;
+
+  return currentRD({
+    rd: this.rd,
+    seedRankedGames: seedGames,
+    inhouseGames: this.gamesPlayed ?? 0,
+    lastActiveAt: this.lastMatchAt ?? (this as unknown as { createdAt?: Date }).createdAt,
+    now,
+  });
+};
+
 playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer {
   const rank = mmrToRank(this.mmr);
   return {
@@ -168,6 +204,7 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     region: this.region,
     seedMMR: this.seedMMR,
     mmr: this.mmr,
+    rd: this.liveRD(),
     wins: this.wins,
     losses: this.losses,
     gamesPlayed: this.gamesPlayed,

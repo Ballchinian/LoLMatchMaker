@@ -159,7 +159,7 @@ function HistoryCard({ m }: { m: MatchRecord }) {
             <span>{when}</span>
             </span>
             <span>
-            win chance A {Math.round((m.expectedA ?? 0) * 100)}% · K={m.kFactor ?? 32}
+            win chance A {Math.round((m.expectedA ?? 0) * 100)}%{m.kFactor != null ? ` · K=${m.kFactor}` : ''}
             </span>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">

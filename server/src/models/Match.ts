@@ -1,52 +1,61 @@
 import { Schema, model, type Model, type HydratedDocument, Types } from 'mongoose';
 import type { Actor, CreatorActor } from '../middleware/auth';
 
-/**
- * A custom game with a lifecycle:
- *   - 'pending'   : the two rosters are locked in (auto-balanced or hand-made) but the
- *                   winner hasn't been confirmed yet. No MMR has moved.
- *   - 'confirmed' : an admin/bot confirmed the winner; MMR/Elo has been applied and the
- *                   per-player before/after is recorded for audit.
- *
- * Each roster entry stores the player's MMR at creation; on confirmation we also fill
- * before/after/delta from the Elo calculation (using live MMR at confirm time).
- */
-
+/*
+    'pending':   no MMR moved yet
+    'confirmed': winner set, MMR/RD applied
+    'reversed':  confirmed, then undone
+*/
 export type MatchStatus = 'pending' | 'confirmed' | 'reversed';
 
 export interface RosterEntry {
+  //Player ObjectId
   player: Types.ObjectId;
   displayName: string;
+  //Integer 0..6000
   mmrAtCreate: number;
+  //Absent while pending; after = before + delta
   before?: number;
   after?: number;
   delta?: number;
+  //Absent while pending and on pre Glicko matches; integers 75..300
+  rdBefore?: number;
+  rdAfter?: number;
 }
 
 export interface MatchAttrs {
   status: MatchStatus;
-  /** Memorable two-word lobby name, e.g. "Feral Scuttle". */
+  //Two word lobby name; absent on old matches
   name?: string;
+  //1..10 entries each
   teamA: RosterEntry[];
   teamB: RosterEntry[];
-  /** The confirmed winner (set on confirmation). */
+  //null while pending; kept after reverse
   winner: 'A' | 'B' | null;
-  /** The winner the reporter claimed at submission (for the admin to review). */
+  //Public submissions only, null otherwise
   proposedWinner?: 'A' | 'B' | null;
-  /** Free-text name a public reporter optionally attached to the submission. */
+  //Public submissions only; max 40 chars
   reportedBy?: string;
+  //Absent while pending; rounded team MMR averages
   teamAAvg?: number;
   teamBAvg?: number;
+  //Absent while pending; 0..1, 3 decimals
   expectedA?: number;
+  //Pre Glicko matches only; integer 1..128
   kFactor?: number;
+  //'admin', 'bot', or 'public'
   createdByActor: CreatorActor;
+  //Absent while pending; 'admin' or 'bot'
   confirmedByActor?: Actor;
   confirmedAt?: Date;
+  //Set only on reversed matches; 'admin' or 'bot'
   reversedByActor?: Actor;
   reversedAt?: Date;
 }
 
 type MatchModel = Model<MatchAttrs>;
+
+//Convert into mongodb document instance
 export type MatchDoc = HydratedDocument<MatchAttrs>;
 
 const rosterEntrySchema = new Schema<RosterEntry>(
@@ -57,6 +66,8 @@ const rosterEntrySchema = new Schema<RosterEntry>(
     before: { type: Number },
     after: { type: Number },
     delta: { type: Number },
+    rdBefore: { type: Number },
+    rdAfter: { type: Number },
   },
   { _id: false },
 );

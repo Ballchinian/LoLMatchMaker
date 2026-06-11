@@ -10,9 +10,9 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
         // passes a much tighter budget (Discord only allows ~3s to respond).
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.BOT_TOKEN}`,
-        ...(rest.headers ?? {}),
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${config.BOT_TOKEN}`,
+            ...(rest.headers ?? {}),
         },
     });
     const text = await res.text();
@@ -60,6 +60,16 @@ export const apiConfirmMatch = (id: string, winner: 'A' | 'B') =>
     method: 'POST',
     body: JSON.stringify({ winner }),
   }).then((r) => r.players);
+
+/**
+ * Ask the server to find the played custom game in Riot match history.
+ * null = couldn't tell (customs aren't guaranteed to be indexed) — ask the humans.
+ * Generous timeout: the server fans out several Riot API calls.
+ */
+export const apiDetectWinner = (id: string) =>
+    req<{ detected: { winner: 'A' | 'B'; gameId: string } | null }>(`/matches/${id}/detected-winner`, {
+    timeoutMs: 30_000,
+  }).then((r) => r.detected);
 
 export const apiLinkDiscord = (playerId: string, discordUserId: string | null) =>
     req<{ player: ApiPlayer }>(`/players/${playerId}/discord`, {

@@ -1,20 +1,3 @@
-# LoL Match Maker — Discord bot
-
-Phase 1: the bot is a **voice-channel orchestrator + result helper** for the inhouse.
-Admins build teams on the website; the bot sets up locked team voice channels, moves
-players, and lets an admin confirm the result (which calls the website with `BOT_TOKEN`).
-No Riot integration required.
-
-## Voice layout
-
-```
-INHOUSE (category)
-├─ 🔊 Lobby                 persistent — waiting room (set LOBBY_CHANNEL_ID)
-└─ per match (auto-created, auto-deleted):
-   ├─ 🎙️ Game Comms         all 10 players in this game (both teams)
-   ├─ 🔵 Team A              locked to Team A
-   └─ 🔴 Team B              locked to Team B
-```
 
 ## Discord setup (do this once)
 
@@ -23,8 +6,12 @@ INHOUSE (category)
    Intents*, enable **Server Members Intent** (Voice State access is not privileged).
 3. **General Information** → copy **Application ID** into `DISCORD_CLIENT_ID`.
 4. Invite the bot (OAuth2 → URL Generator): scopes **`bot`** + **`applications.commands`**;
-   bot permissions **Manage Channels, Manage Roles, Move Members, View Channels, Connect**.
-   Open the generated URL and add it to your server.
+   bot permissions **Manage Roles, Manage Channels, Manage Messages, Manage Threads,
+   Create Public Threads, Send Messages, Send Messages in Threads, View Channels, Connect,
+   Move Members** (permissions integer `326703787024`).
+   The bot can only hand out channel permissions it holds itself, so /setup FAILS without all of these.
+   Open the generated URL and add it to your server. (Already invited with fewer perms? No
+   re-invite needed: Server Settings → Roles → the bot's role → enable the missing ones.)
 5. Copy your **server id** (enable Developer Mode → right-click server → Copy ID) into `DISCORD_GUILD_ID`.
 6. Create a persistent **Lobby** voice channel; copy its id into `LOBBY_CHANNEL_ID`.
 
@@ -54,7 +41,7 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 | `/link player:<name> roles:<1-5> champs:<pool>` | anyone | link your Discord account (answering the two versatility questions) → unlocks the server + assigns your rank role |
 | `/update [roles] [champs]` | anyone | change your versatility answers later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
-| `/setup` | admin | create the Linked role, 10 rank roles, and the commands channel |
+| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, and the commands channel |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin (non-admins trigger a lobby-majority 👍/👎 vote) | create the channels and send players straight to their team channels |
 | `/match split match:<pending>` | admin | move players (back) into their team channels |
@@ -71,8 +58,10 @@ New members should only see the **commands channel** until they link, then get a
 matching their website rank (Iron … Challenger) that stays in sync.
 
 One-time setup:
-1. Run **`/setup`** — creates the `Linked` role (with View Channels), the 10 tier roles, and the
-   commands channel visible to everyone (slash-commands-only: typing is blocked/auto-deleted).
+1. Run **`/setup`** — creates the `Match Admin` role (give it to your admins; holders can run
+   admin commands without "Manage Server"), the `Linked` role (with View Channels), the 10 tier
+   roles, and the commands channel visible to everyone (slash-commands-only: typing is
+   blocked/auto-deleted).
 2. In **Server Settings → Roles → @everyone**, turn **OFF** "View Channels".
 3. Make sure the **bot's own role sits ABOVE all the rank roles** (Server Settings → Roles)
    so it can assign them.
@@ -99,7 +88,7 @@ The bot is a **worker** (connects out to Discord) — no port, domain, or health
    - `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`
    - `BOT_TOKEN` — **must match** the backend service's `BOT_TOKEN`
    - `API_BASE_URL` — your backend's public URL **incl. `/api`**, e.g. `https://your-app.up.railway.app/api`
-   - `LOBBY_CHANNEL_ID` (for returning players to Lobby), optional `ADMIN_ROLE_ID`, `INHOUSE_CATEGORY`
+   - `LOBBY_CHANNEL_ID` (for returning players to Lobby), optional `ADMIN_ROLE_ID`/`ADMIN_ROLE_NAME`, `INHOUSE_CATEGORY`
 4. Deploy. The bot **auto-registers its slash commands on startup** — no separate step.
    Watch **Deploy Logs** for `logged in as …` and `registered N slash command(s)`.
 

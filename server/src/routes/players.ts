@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Player } from '../models/Player';
 import { lookupByRiotId, type RiotProfile } from '../services/riot';
 import { computeSeedMMR } from '../services/mmr';
+import { seedRD, RD_FLOOR, RD_CEILING } from '../services/glicko';
 import { rankToMMR, TIERS, DIVISIONS, type Tier, type Division } from '../services/rank';
 import { riotEnabled } from '../config/env';
 import { ApiError, asyncHandler } from '../middleware/errors';
@@ -75,6 +76,9 @@ function playerFromRiotProfile(profile: RiotProfile) {
     recent: profile.recent ?? undefined,
     seedMMR,
     mmr: seedMMR,
+    // Confidence in the seed scales with current-season ranked games (250 → 89);
+    // an unranked account is a near-unknown (300).
+    rd: seedRD(profile.rank ? profile.rank.wins + profile.rank.losses : null),
   };
 }
 
@@ -190,6 +194,8 @@ playersRouter.post(
         region,
         seedMMR,
         mmr: seedMMR,
+        // No ranked-activity data behind a manual entry — full uncertainty.
+        rd: seedRD(null),
       };
     }
 
@@ -229,14 +235,15 @@ const mmrSchema = z
   .object({
     seedMMR: z.number().int().min(0).max(6000).optional(),
     mmr: z.number().int().min(0).max(6000).optional(),
+    rd: z.number().int().min(RD_FLOOR).max(RD_CEILING).optional(),
   })
-  .refine((d) => d.seedMMR !== undefined || d.mmr !== undefined, {
-    message: 'Provide seedMMR and/or mmr.',
+  .refine((d) => d.seedMMR !== undefined || d.mmr !== undefined || d.rd !== undefined, {
+    message: 'Provide seedMMR, mmr and/or rd.',
   });
 
 /**
- * PATCH /api/players/:id/mmr — admin override of a player's seed and/or current MMR.
- * Identity stays immutable; this only touches the ratings.
+ * PATCH /api/players/:id/mmr — admin override of a player's seed, current MMR
+ * and/or rating uncertainty (rd). Identity stays immutable.
  */
 playersRouter.patch(
   '/:id/mmr',
@@ -248,6 +255,7 @@ playersRouter.patch(
 
     if (body.seedMMR !== undefined) player.seedMMR = body.seedMMR;
     if (body.mmr !== undefined) player.mmr = body.mmr;
+    if (body.rd !== undefined) player.rd = body.rd;
     await player.save();
 
     res.json({ player: player.toPublic() });
@@ -267,7 +275,7 @@ const rolesSchema = z
  * PATCH /api/players/:id/roles — set a player's versatility: role coverage
  * (1 → -125 … 5 → +50) and champion-pool depth (one-trick -200, two-trick -75,
  * diverse 0). The modifiers stack into the displayed/balancing MMR; raw MMR,
- * ranks and Elo are untouched.
+ * ranks and Glicko are untouched.
  */
 playersRouter.patch(
   '/:id/roles',

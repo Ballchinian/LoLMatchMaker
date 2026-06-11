@@ -3,7 +3,7 @@ import { rankToMMR, type RankInput } from './rank';
 /**
  * MMR seeding: turn a freshly-injected player's Riot data into a single internal
  * MMR number. This runs ONCE at injection; the value is frozen as `seedMMR` and
- * also used as the starting `mmr`, which then evolves via Elo as customs are played.
+ * also used as the starting `mmr`, which then evolves via Glicko as customs are played.
  */
 
 /** Default starting MMR for an unranked / Riot-less player (≈ Silver II). */
@@ -94,7 +94,7 @@ export function versatilityModifier(
 
 /**
  * The adjusted MMR used for team balancing AND shown as the player's MMR.
- * Ranks and Elo (post-game gains/losses) still operate on the raw `mmr`.
+ * Ranks and Glicko (post-game gains/losses) still operate on the raw `mmr`.
  */
 export function effectiveMMR(
   mmr: number,

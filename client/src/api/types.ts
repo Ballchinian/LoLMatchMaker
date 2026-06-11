@@ -56,6 +56,8 @@ export interface Player {
     region: string;
     seedMMR: number;
     mmr: number;
+    /** Glicko rating deviation — how unsettled the MMR is (75 = veteran … 300 = unknown). */
+    rd: number;
     wins: number;
     losses: number;
     gamesPlayed: number;
@@ -125,6 +127,8 @@ export interface RosterEntry {
     before?: number;
     after?: number;
     delta?: number;
+    rdBefore?: number;
+    rdAfter?: number;
 }
 
 export interface MatchRecord {
@@ -139,6 +143,7 @@ export interface MatchRecord {
     teamAAvg?: number;
     teamBAvg?: number;
     expectedA?: number;
+    /** Legacy: only on matches confirmed under the old Elo system. */
     kFactor?: number;
     createdByActor: CreatorActor;
     confirmedByActor?: Actor;

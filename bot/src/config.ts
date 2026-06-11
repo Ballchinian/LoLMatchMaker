@@ -7,6 +7,8 @@ const schema = z.object({
     DISCORD_GUILD_ID: z.string().min(1, 'DISCORD_GUILD_ID is required'),
 
     ADMIN_ROLE_ID: z.string().optional().default(''),
+    // Admin marker role created by /setup; holders count as bot admins (only when ADMIN_ROLE_ID is blank).
+    ADMIN_ROLE_NAME: z.string().default('Match Admin'),
     INHOUSE_CATEGORY: z.string().default('Inhouse'),
     LOBBY_CHANNEL_ID: z.string().optional().default(''),
 

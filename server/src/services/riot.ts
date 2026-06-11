@@ -147,6 +147,101 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
   }
 }
 
+/* ----------------------- custom-game result detection ---------------------- */
+
+export interface DetectedCustomResult {
+  winner: 'A' | 'B';
+  gameId: string;
+  gameEndedAt: number; // epoch ms
+}
+
+/**
+ * Best-effort: find the finished custom game these two rosters just played and
+ * which side won. Plain customs are NOT guaranteed to appear in match-v5 (only
+ * tournament-code games are), so `null` means "couldn't tell — ask the humans",
+ * never "no game happened".
+ *
+ * Matching is by PUUID overlap: sample a few players' recent match ids since the
+ * match was created, keep custom games containing (almost) the whole lobby, then
+ * map the in-game winning side back onto our rosters — tolerating one player
+ * sitting on the "wrong" side compared to the website teams.
+ */
+export async function findRecentCustomResult(
+  teamAPuuids: string[],
+  teamBPuuids: string[],
+  sinceMs: number,
+): Promise<DetectedCustomResult | null> {
+  assertEnabled();
+  const known = [...teamAPuuids, ...teamBPuuids];
+  if (known.length < 4) return null; // too few linked Riot accounts to identify the lobby
+
+  // A custom can be missing from one player's history yet present in another's,
+  // so sample a few PUUIDs across both teams.
+  const samples = [teamAPuuids[0], teamBPuuids[0], teamAPuuids[1] ?? teamBPuuids[1]].filter(
+    (p): p is string => Boolean(p),
+  );
+
+  const regional = regionalHttp();
+  const candidateIds = new Set<string>();
+  for (const puuid of samples) {
+    try {
+      const { data } = await regional.get<string[]>(
+        `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
+        { params: { startTime: Math.floor(sinceMs / 1000), count: 5 } },
+      );
+      for (const id of data) candidateIds.add(id);
+    } catch {
+      // One player's history failing shouldn't sink the search.
+    }
+  }
+
+  interface CandidateInfo {
+    queueId: number;
+    gameType: string;
+    gameDuration: number; // seconds
+    gameCreation: number; // epoch ms
+    gameEndTimestamp?: number; // epoch ms
+    participants: Array<{ puuid: string; win: boolean }>;
+  }
+  const details = await Promise.all(
+    [...candidateIds].slice(0, 8).map((id) =>
+      regional
+        .get<{ info: CandidateInfo }>(`/lol/match/v5/matches/${encodeURIComponent(id)}`)
+        .then((r) => ({ id, info: r.data.info }))
+        .catch(() => null),
+    ),
+  );
+
+  let best: DetectedCustomResult | null = null;
+  for (const d of details) {
+    if (!d) continue;
+    const { id, info } = d;
+    if (info.queueId !== 0 && info.gameType !== 'CUSTOM_GAME') continue;
+    if (info.gameDuration < 300) continue; // remake / abandoned lobby
+
+    const inGame = new Set(info.participants.map((p) => p.puuid));
+    const overlap = known.filter((p) => inGame.has(p)).length;
+    if (overlap < Math.max(4, Math.ceil(known.length * 0.8))) continue; // not our lobby
+
+    // Each in-game lobby member supports one orientation: "A won" is backed by
+    // our-A players who won plus our-B players who lost (and vice versa).
+    const winners = new Set(info.participants.filter((p) => p.win).map((p) => p.puuid));
+    const aWon =
+      teamAPuuids.filter((p) => winners.has(p)).length +
+      teamBPuuids.filter((p) => inGame.has(p) && !winners.has(p)).length;
+    const bWon = overlap - aWon;
+
+    let winner: 'A' | 'B' | null = null;
+    if (aWon >= overlap - 1 && aWon > bWon) winner = 'A';
+    else if (bWon >= overlap - 1 && bWon > aWon) winner = 'B';
+    if (!winner) continue; // sides don't line up with the website rosters
+
+    const endedAt = info.gameEndTimestamp ?? info.gameCreation + info.gameDuration * 1000;
+    if (!best || endedAt > best.gameEndedAt) best = { winner, gameId: id, gameEndedAt: endedAt };
+  }
+  return best;
+}
+
 /** Look up a full normalized profile by Riot ID (gameName#tagLine). */
 export async function lookupByRiotId(gameName: string, tagLine: string): Promise<RiotProfile> {
   assertEnabled();

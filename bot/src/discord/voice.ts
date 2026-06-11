@@ -18,35 +18,35 @@ export async function ensureCategory(guild: Guild): Promise<CategoryChannel> {
     return guild.channels.create({ name: config.INHOUSE_CATEGORY, type: ChannelType.GuildCategory });
 }
 
-/** @everyone can't connect; only the listed members can. The bot keeps full access to its own channels. */
+//@everyone can't connect; only the listed members can. The bot keeps full access to its own channels.
 function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolvable[] {
-    // Every overwrite carries an explicit `type` — raw snowflake strings can't be
-    // resolved against the (lazily filled) cache and would throw InvalidType.
+    
+    //Member overwrites take priority over role overwrites in Discord's permission hierarchy.
     const overwrites: OverwriteResolvable[] = [
         {
-        id: guild.roles.everyone.id,
-        type: OverwriteType.Role,
-        deny: [PermissionFlagsBits.Connect],
+            id: guild.roles.everyone.id,
+            type: OverwriteType.Role,
+            deny: [PermissionFlagsBits.Connect],
         },
         ...allowMemberIds.map((id) => ({
-        id,
-        type: OverwriteType.Member,
-        allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
+            id,
+            type: OverwriteType.Member,
+            allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
         })),
     ];
-    // Ensure the bot can always see/manage/move within the channels it creates,
-    // even if its server role lacks View Channel or the category is restricted.
+    
+    //Ensure the bot can always see/manage/move within the channels it creates,
     const meId = guild.members.me?.id;
     if (meId) {
         overwrites.push({
-        id: meId,
-        type: OverwriteType.Member,
-        allow: [
-            PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.Connect,
-            PermissionFlagsBits.ManageChannels,
-            PermissionFlagsBits.MoveMembers,
-        ],
+            id: meId,
+            type: OverwriteType.Member,
+            allow: [
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.Connect,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.MoveMembers,
+            ],
         });
     }
     return overwrites;
@@ -59,7 +59,7 @@ export interface CreatedChannels {
     teamBId: string;
 }
 
-/** Create the Game Comms + Team A + Team B voice channels with locked permissions. */
+//Create the Game Comms + Team A + Team B voice channels with locked permissions
 export async function createMatchChannels(
     guild: Guild,
     parent: CategoryChannel,
@@ -89,7 +89,7 @@ export async function createMatchChannels(
     return { categoryId: parent.id, gameCommsId: gameComms.id, teamAId: teamA.id, teamBId: teamB.id };
 }
 
-/** Move members (who are currently in any voice channel) into `channelId`. Returns count moved. */
+// Move members (who are currently in any voice channel) into `channelId`. Returns count moved.
 export async function moveMembers(
     guild: Guild,
     memberIds: string[],
@@ -110,6 +110,7 @@ export async function moveMembers(
     return moved;
 }
 
+//Result of deleting channels
 export interface DeleteResult {
     deleted: number;
     errors: string[];

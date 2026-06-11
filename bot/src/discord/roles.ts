@@ -52,25 +52,32 @@ async function ensureRole(
     });
 }
 
-/** The access-gate role (created with View Channel + Connect so granting it = server access). */
+//The access role (created with View Channel + Connect so granting it = server access)
 export function ensureLinkedRole(guild: Guild): Promise<Role> {
     return ensureRole(guild, config.LINKED_ROLE_NAME, {
         permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
     });
 }
 
-/** Pre-create the Linked role + all tier roles (for first-time setup). */
+//The admin marker role: grants no Discord permissions, the bot just recognizes it
+export function ensureAdminRole(guild: Guild): Promise<Role> {
+    return ensureRole(guild, config.ADMIN_ROLE_NAME, { color: 0xd4af37, hoist: false });
+}
+
+//Create the admin + Linked + all tier roles (for first-time setup).
 export async function ensureAllRoles(guild: Guild): Promise<void> {
+    await ensureAdminRole(guild);
     await ensureLinkedRole(guild);
     for (const [tier, name] of Object.entries(TIER_DISPLAY)) {
-        await ensureRole(guild, name, { color: TIER_COLOR[tier], hoist: true });
+        await ensureRole(guild, name, { color: TIER_COLOR[tier], hoist: false });
     }
 }
 
-/**
- * Give a member the Linked role + the single tier role matching their website rank,
- * removing any stale tier roles. Returns the rank label applied.
- */
+/*
+    Give a member the Linked role + the single tier role matching their website rank,
+    removing any stale tier roles. Returns the rank label applied.
+*/
+
 export async function syncMemberRoles(
     guild: Guild,
     member: GuildMember,
@@ -79,24 +86,28 @@ export async function syncMemberRoles(
     const linked = await ensureLinkedRole(guild);
     const targetName = tier ? (TIER_DISPLAY[tier] ?? null) : null;
 
-    // Remove tier roles the member shouldn't have.
-    const stale = member.roles.cache
-        .filter((r) => ALL_TIER_ROLE_NAMES.has(r.name) && r.name !== targetName)
-        .map((r) => r.id);
-    if (stale.length) await member.roles.remove(stale, 'Match Maker rank sync');
-
-    const toAdd: string[] = [];
-    if (!member.roles.cache.has(linked.id)) toAdd.push(linked.id);
+    //Desired = current roles minus stale tiers, plus Linked + the current tier.
+    const desired = new Set(
+        member.roles.cache
+            .filter((r) => !(ALL_TIER_ROLE_NAMES.has(r.name) && r.name !== targetName))
+            .keys(),
+    );
+    desired.add(linked.id);
     if (targetName && tier) {
-        const role = await ensureRole(guild, targetName, { color: TIER_COLOR[tier], hoist: true });
-        if (!member.roles.cache.has(role.id)) toAdd.push(role.id);
+        const role = await ensureRole(guild, targetName, { color: TIER_COLOR[tier], hoist: false });
+        desired.add(role.id);
     }
-    if (toAdd.length) await member.roles.add(toAdd, 'Match Maker rank sync');
+
+    //Avoids role updates and ensures consistent role deployment
+    const changed = desired.size !== member.roles.cache.size ||
+        [...desired].some((id) => !member.roles.cache.has(id));
+
+    if (changed) await member.roles.set([...desired], 'Match Maker rank sync');
 
     return targetName ?? 'Unranked';
 }
 
-/** Strip the Linked + any tier roles (used on unlink, re-gating the member). */
+//Strip the Linked + any tier roles (used on unlink, re-gating the member).
 export async function clearMemberRoles(guild: Guild, member: GuildMember): Promise<void> {
     const names = new Set([config.LINKED_ROLE_NAME, ...Object.values(TIER_DISPLAY)]);
     const toRemove = member.roles.cache.filter((r) => names.has(r.name)).map((r) => r.id);

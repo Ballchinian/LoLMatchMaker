@@ -3,7 +3,9 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Player, type PlayerDoc } from '../models/Player';
 import { Match, type MatchDoc, type RosterEntry } from '../models/Match';
-import { applyMatchResult, type EloPlayer } from '../services/elo';
+import { applyMatchResult, type GlickoPlayer } from '../services/glicko';
+import { findRecentCustomResult } from '../services/riot';
+import { riotEnabled } from '../config/env';
 import { randomLobbyName } from '../services/lobbyName';
 import { ApiError, asyncHandler } from '../middleware/errors';
 import { requireWriter, resolveCreator, type Actor } from '../middleware/auth';
@@ -26,13 +28,11 @@ const teamsSchema = z.object({
   // Public reporters: the winner they claim + who they are (for admin review).
   proposedWinner: z.enum(['A', 'B']).optional(),
   reportedBy: z.string().max(40).optional(),
-  kFactor: z.number().int().min(1).max(128).optional(),
 });
 
 const confirmSchema = z.object({
   // Optional: defaults to the reporter's proposed winner if omitted.
   winner: z.enum(['A', 'B']).optional(),
-  kFactor: z.number().int().min(1).max(128).optional(),
 });
 
 /** Load the given player ids, erroring if any are missing or duplicated. */
@@ -49,7 +49,7 @@ async function loadPlayers(teamA: string[], teamB: string[]): Promise<Map<string
   return new Map(players.map((p) => [p._id.toString(), p]));
 }
 
-/** A lobby name not currently used by another pending match (best-effort, falls back with a suffix). */
+//A lobby name not currently used by another pending match (best-effort, falls back with a suffix)
 async function uniqueLobbyName(): Promise<string> {
   const pending = await Match.find({ status: 'pending' }).select('name').lean().exec();
   const taken = new Set(pending.map((m) => m.name).filter(Boolean));
@@ -67,23 +67,24 @@ function rosterFrom(ids: string[], byId: Map<string, PlayerDoc>): RosterEntry[] 
   });
 }
 
-/**
- * Confirm a pending match: compute Elo from the players' CURRENT mmr, persist each
- * player's new mmr + ladder record, fill in the match's before/after, and finalize it.
- * Returns the updated players.
+/*
+    Confirm a pending match: compute Glicko updates from the players' CURRENT
+    mmr/RD, persist each player's new mmr + RD + ladder record, fill in the
+    match's before/after, and finalize it. Returns the updated players.
  */
-async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor, kFactor?: number) {
+async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor) {
   const teamAIds = match.teamA.map((e) => e.player.toString());
   const teamBIds = match.teamB.map((e) => e.player.toString());
 
+  const now = new Date();
   const byId = await loadPlayers(teamAIds, teamBIds);
-  const toElo = (ids: string[]): EloPlayer[] =>
+  const toGlicko = (ids: string[]): GlickoPlayer[] =>
     ids.map((id) => {
       const p = byId.get(id)!;
-      return { id, mmr: p.mmr, gamesPlayed: p.gamesPlayed };
+      return { id, mmr: p.mmr, rd: p.liveRD(now) };
     });
 
-  const outcome = applyMatchResult(toElo(teamAIds), toElo(teamBIds), winner, kFactor);
+  const outcome = applyMatchResult(toGlicko(teamAIds), toGlicko(teamBIds), winner);
   const changeById = new Map(outcome.changes.map((c) => [c.id, c]));
 
   const fill = (entries: RosterEntry[]) => {
@@ -92,12 +93,14 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor, kF
       e.before = c.before;
       e.after = c.after;
       e.delta = c.delta;
+      e.rdBefore = c.rdBefore;
+      e.rdAfter = c.rdAfter;
     }
   };
   fill(match.teamA);
   fill(match.teamB);
 
-  // Persist per-player MMR + ladder record.
+  // Persist per-player MMR + RD + ladder record.
   await Promise.all(
     outcome.changes.map((c) => {
       const onWinningTeam =
@@ -105,7 +108,7 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor, kF
       return Player.updateOne(
         { _id: c.id },
         {
-          $set: { mmr: c.after },
+          $set: { mmr: c.after, rd: c.rdAfter, lastMatchAt: now },
           $inc: { gamesPlayed: 1, wins: onWinningTeam ? 1 : 0, losses: onWinningTeam ? 0 : 1 },
         },
       ).exec();
@@ -117,9 +120,8 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor, kF
   match.teamAAvg = Math.round(outcome.teamAAvg);
   match.teamBAvg = Math.round(outcome.teamBAvg);
   match.expectedA = Math.round(outcome.expectedA * 1000) / 1000;
-  match.kFactor = kFactor ?? 32;
   match.confirmedByActor = actor;
-  match.confirmedAt = new Date();
+  match.confirmedAt = now;
   await match.save();
 
   const updated = await Player.find({ _id: { $in: [...teamAIds, ...teamBIds] } }).exec();
@@ -143,6 +145,8 @@ async function reverseMatch(match: MatchDoc, actor: Actor) {
       const p = byId.get(e.player.toString());
       if (!p) continue; // player no longer exists — skip
       p.mmr = Math.max(0, p.mmr - (e.delta ?? 0));
+      // Restore the uncertainty this game consumed (pre-Glicko matches have none).
+      if (e.rdBefore != null) p.rd = e.rdBefore;
       p.gamesPlayed = Math.max(0, p.gamesPlayed - 1);
       if (won) p.wins = Math.max(0, p.wins - 1);
       else p.losses = Math.max(0, p.losses - 1);
@@ -169,6 +173,38 @@ matchesRouter.get(
   asyncHandler(async (_req, res) => {
     const matches = await Match.find().sort({ createdAt: -1 }).limit(100).lean().exec();
     res.json({ matches });
+  }),
+);
+
+/**
+ * GET /api/matches/:id/detected-winner — best-effort: find the played custom
+ * game in Riot match history and report who won. `detected: null` means
+ * "couldn't tell" (plain customs aren't guaranteed to appear in match-v5) —
+ * the caller should fall back to asking the players.
+ */
+matchesRouter.get(
+  '/:id/detected-winner',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const match = await Match.findById(req.params.id).exec();
+    if (!match) throw new ApiError(404, 'Match not found.');
+    if (match.status !== 'pending') throw new ApiError(409, 'Only pending matches have a winner to detect.');
+
+    const allIds = [...match.teamA, ...match.teamB].map((e) => e.player.toString());
+    const players = await Player.find({ _id: { $in: allIds } }).exec();
+    const byId = new Map(players.map((p) => [p._id.toString(), p]));
+    const puuidsOf = (entries: RosterEntry[]) =>
+      entries
+        .map((e) => byId.get(e.player.toString())?.riot?.puuid)
+        .filter((x): x is string => Boolean(x));
+
+    const createdAt = (match as unknown as { createdAt: Date }).createdAt;
+    const detected = riotEnabled
+      ? await findRecentCustomResult(puuidsOf(match.teamA), puuidsOf(match.teamB), createdAt.getTime()).catch(
+          () => null,
+        )
+      : null;
+    res.json({ detected });
   }),
 );
 
@@ -210,7 +246,7 @@ matchesRouter.post(
 
     // Only admin/bot may confirm in one shot.
     if ((creator === 'admin' || creator === 'bot') && body.winner) {
-      const players = await confirmMatch(match, body.winner, creator, body.kFactor);
+      const players = await confirmMatch(match, body.winner, creator);
       res.status(201).json({ match, players });
       return;
     }
@@ -227,7 +263,7 @@ matchesRouter.post(
   '/:id/confirm',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const { winner, kFactor } = confirmSchema.parse(req.body);
+    const { winner } = confirmSchema.parse(req.body);
     const match = await Match.findById(req.params.id).exec();
     if (!match) throw new ApiError(404, 'Match not found.');
     if (match.status !== 'pending') throw new ApiError(409, 'This match has already been confirmed.');
@@ -237,7 +273,7 @@ matchesRouter.post(
       throw new ApiError(400, 'Specify the winner (A or B) — no proposed winner to fall back on.');
     }
 
-    const players = await confirmMatch(match, effectiveWinner, req.actor!, kFactor);
+    const players = await confirmMatch(match, effectiveWinner, req.actor!);
     res.json({ match, players });
   }),
 );

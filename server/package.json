@@ -2,7 +2,7 @@
   "name": "lol-matchmaker-server",
   "version": "0.1.0",
   "private": true,
-  "description": "Backend API for the LoL Match Maker: player injection, MMR, fair team balancing, Elo updates.",
+  "description": "Backend API for the LoL Match Maker: player injection, MMR, fair team balancing, Glicko rating updates.",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
