@@ -11,17 +11,22 @@ export const update: Command = {
         .addStringOption(champsOption(true)),
 
     async execute(interaction) {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+            await interaction.reply({ content: '❌ Use this in a server.', flags: MessageFlags.Ephemeral });
+            return;
+        }
         const champPool = interaction.options.getString('champs', true) as ChampPool;
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-        const players = await apiGetPlayers();
+        const players = await apiGetPlayers(guildId);
         const mine = players.find((p) => p.discordUserId === interaction.user.id);
         if (!mine) {
             await interaction.editReply('❌ You are not linked to a player yet, run /link first.');
             return;
         }
 
-        const player = await apiUpdateRoles(mine.id, { champPool });
+        const player = await apiUpdateRoles(guildId, mine.id, { champPool });
         await interaction.editReply(`✔️ Updated **${player.displayName}** — champ pool: ${champPool}.`);
     },
 };

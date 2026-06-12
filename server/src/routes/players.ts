@@ -1,13 +1,13 @@
-import { Router } from 'express';
+import { Router, type Request } from 'express';
 import { z } from 'zod';
-import { Player } from '../models/Player';
+import { Player, type PlayerDoc } from '../models/Player';
 import { lookupByRiotId, type RiotProfile } from '../services/riot';
 import { computeSeedMMR } from '../services/mmr';
 import { seedRD, RD_FLOOR, RD_CEILING } from '../services/glicko';
 import { rankToMMR, TIERS, DIVISIONS, type Tier, type Division } from '../services/rank';
 import { riotEnabled } from '../config/env';
 import { ApiError, asyncHandler } from '../middleware/errors';
-import { requireWriter } from '../middleware/auth';
+import { guildFilter, requireWriter } from '../middleware/auth';
 
 export const playersRouter = Router();
 
@@ -15,6 +15,20 @@ export const playersRouter = Router();
 
 function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/** Load a player by id within the request's server scope (404 outside it). */
+async function loadScopedPlayer(req: Request): Promise<PlayerDoc> {
+  const player = await Player.findById(req.params.id).exec();
+  if (!player || (player.guildId ?? null) !== (req.guildId ?? null)) {
+    throw new ApiError(404, 'Player not found.');
+  }
+  return player;
+}
+
+/** Prefix a uniqueKey with the owning guild so the same person can exist per server. */
+function scopedKey(guildId: string | null, key: string): string {
+  return guildId ? `${guildId}:${key}` : key;
 }
 
 /** Trim, drop empties, and de-duplicate tags case-insensitively (keeping first-seen casing). */
@@ -45,7 +59,7 @@ function manualUniqueKey(region: string, displayName: string): string {
 }
 
 /** Build the immutable Player payload from a Riot profile. */
-function playerFromRiotProfile(profile: RiotProfile) {
+function playerFromRiotProfile(profile: RiotProfile, guildId: string | null) {
   const seedMMR = computeSeedMMR({
     riotRank: profile.rank
       ? { tier: profile.rank.tier, division: profile.rank.division, leaguePoints: profile.rank.leaguePoints }
@@ -55,7 +69,8 @@ function playerFromRiotProfile(profile: RiotProfile) {
 
   return {
     source: 'riot' as const,
-    uniqueKey: riotUniqueKey(profile.puuid),
+    guildId,
+    uniqueKey: scopedKey(guildId, riotUniqueKey(profile.puuid)),
     displayName: `${profile.gameName}#${profile.tagLine}`,
     region: profile.platform,
     riot: {
@@ -84,11 +99,11 @@ function playerFromRiotProfile(profile: RiotProfile) {
 
 /* -------------------------------- routes ------------------------------- */
 
-/** GET /api/players — all injected players, strongest first. */
+/** GET /api/players — this server's players, strongest first. Public within scope. */
 playersRouter.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const players = await Player.find().sort({ mmr: -1 }).exec();
+  asyncHandler(async (req, res) => {
+    const players = await Player.find(guildFilter(req)).sort({ mmr: -1 }).exec();
     res.json({ players: players.map((p) => p.toPublic()) });
   }),
 );
@@ -97,8 +112,7 @@ playersRouter.get(
 playersRouter.get(
   '/:id',
   asyncHandler(async (req, res) => {
-    const player = await Player.findById(req.params.id).exec();
-    if (!player) throw new ApiError(404, 'Player not found.');
+    const player = await loadScopedPlayer(req);
     res.json({ player: player.toPublic() });
   }),
 );
@@ -122,7 +136,7 @@ playersRouter.post(
     const { gameName, tagLine } = searchSchema.parse(req.body);
     const profile = await lookupByRiotId(gameName, tagLine);
 
-    const draft = playerFromRiotProfile(profile);
+    const draft = playerFromRiotProfile(profile, req.guildId ?? null);
     const existing = await Player.findOne({ uniqueKey: draft.uniqueKey }).exec();
 
     res.json({
@@ -171,6 +185,7 @@ playersRouter.post(
   requireWriter,
   asyncHandler(async (req, res) => {
     const body = injectSchema.parse(req.body);
+    const guildId = req.guildId ?? null;
 
     let attrs;
     if (body.source === 'riot') {
@@ -178,7 +193,7 @@ playersRouter.post(
         throw new ApiError(503, 'Riot injection is disabled — no Riot API key configured on the server.');
       }
       const profile = await lookupByRiotId(body.gameName, body.tagLine);
-      attrs = playerFromRiotProfile(profile);
+      attrs = playerFromRiotProfile(profile, guildId);
     } else {
       const region = body.region?.trim() || 'manual';
       const seedMMR = computeSeedMMR({
@@ -189,7 +204,8 @@ playersRouter.post(
       });
       attrs = {
         source: 'manual' as const,
-        uniqueKey: manualUniqueKey(region, body.displayName),
+        guildId,
+        uniqueKey: scopedKey(guildId, manualUniqueKey(region, body.displayName)),
         displayName: body.displayName.trim(),
         region,
         seedMMR,
@@ -223,8 +239,7 @@ playersRouter.patch(
   requireWriter,
   asyncHandler(async (req, res) => {
     const { tags } = updateTagsSchema.parse(req.body);
-    const player = await Player.findById(req.params.id).exec();
-    if (!player) throw new ApiError(404, 'Player not found.');
+    const player = await loadScopedPlayer(req);
     player.tags = normalizeTags(tags);
     await player.save();
     res.json({ player: player.toPublic() });
@@ -250,8 +265,7 @@ playersRouter.patch(
   requireWriter,
   asyncHandler(async (req, res) => {
     const body = mmrSchema.parse(req.body);
-    const player = await Player.findById(req.params.id).exec();
-    if (!player) throw new ApiError(404, 'Player not found.');
+    const player = await loadScopedPlayer(req);
 
     if (body.seedMMR !== undefined) player.seedMMR = body.seedMMR;
     if (body.mmr !== undefined) player.mmr = body.mmr;
@@ -282,8 +296,7 @@ playersRouter.patch(
   requireWriter,
   asyncHandler(async (req, res) => {
     const body = rolesSchema.parse(req.body);
-    const player = await Player.findById(req.params.id).exec();
-    if (!player) throw new ApiError(404, 'Player not found.');
+    const player = await loadScopedPlayer(req);
     if (body.rolesPlayed !== undefined) player.rolesPlayed = body.rolesPlayed;
     if (body.champPool !== undefined) player.champPool = body.champPool;
     await player.save();
@@ -304,12 +317,11 @@ playersRouter.patch(
   requireWriter,
   asyncHandler(async (req, res) => {
     const { discordUserId } = discordLinkSchema.parse(req.body);
-    const player = await Player.findById(req.params.id).exec();
-    if (!player) throw new ApiError(404, 'Player not found.');
+    const player = await loadScopedPlayer(req);
 
     if (discordUserId) {
-      // This Discord account already claimed by a different player?
-      const existing = await Player.findOne({ discordUserId }).exec();
+      // This Discord account already claimed by a different player ON THIS SERVER?
+      const existing = await Player.findOne({ discordUserId, ...guildFilter(req) }).exec();
       if (existing && existing._id.toString() !== player._id.toString()) {
         throw new ApiError(409, 'That Discord account is already linked to another player.');
       }
@@ -328,6 +340,121 @@ playersRouter.patch(
     }
 
     res.json({ player: player.toPublic() });
+  }),
+);
+
+/* ------------------------------- resets -------------------------------- */
+
+/** The fields a reset touches, for before/after confirmation messages. */
+export interface ResetView {
+  displayName: string;
+  mmr: number;
+  seedMMR: number;
+  rd: number;
+  wins: number;
+  losses: number;
+  gamesPlayed: number;
+  /** Frozen Riot rank snapshot, e.g. "GOLD II 40LP"; null when absent. */
+  riotRank: string | null;
+}
+
+function resetView(p: PlayerDoc): ResetView {
+  const riot = p.riot;
+  return {
+    displayName: p.displayName,
+    mmr: p.mmr,
+    seedMMR: p.seedMMR,
+    rd: p.liveRD(),
+    wins: p.wins,
+    losses: p.losses,
+    gamesPlayed: p.gamesPlayed,
+    riotRank: riot?.tier ? `${riot.tier}${riot.division ? ` ${riot.division}` : ''} ${riot.leaguePoints ?? 0}LP` : null,
+  };
+}
+
+/*
+    Reset a player's attached Riot details and ladder state WITHOUT touching the
+    Discord link: riot players are re-fetched (fresh rank snapshot + re-seeded
+    MMR/RD), manual players fall back to their seed. W/L/games restart at zero.
+    Identity fields are schema-immutable, so the update opts into
+    overwriteImmutable for the refreshed snapshot.
+*/
+async function performReset(player: PlayerDoc): Promise<{ before: ResetView; after: ResetView; refreshedFromRiot: boolean }> {
+  const before = resetView(player);
+
+  let update: Record<string, unknown>;
+  let refreshedFromRiot = false;
+  if (player.source === 'riot' && riotEnabled && player.riot?.gameName && player.riot?.tagLine) {
+    const profile = await lookupByRiotId(player.riot.gameName, player.riot.tagLine);
+    const draft = playerFromRiotProfile(profile, player.guildId ?? null);
+    update = {
+      displayName: draft.displayName,
+      riot: draft.riot,
+      recent: draft.recent ?? null,
+      seedMMR: draft.seedMMR,
+      mmr: draft.seedMMR,
+      rd: draft.rd,
+      wins: 0,
+      losses: 0,
+      gamesPlayed: 0,
+      lastMatchAt: null,
+    };
+    refreshedFromRiot = true;
+  } else {
+    const riot = player.riot;
+    update = {
+      mmr: player.seedMMR,
+      rd: seedRD(riot?.tier ? (riot.wins ?? 0) + (riot.losses ?? 0) : null),
+      wins: 0,
+      losses: 0,
+      gamesPlayed: 0,
+      lastMatchAt: null,
+    };
+  }
+
+  await Player.updateOne({ _id: player._id }, { $set: update }, { overwriteImmutable: true }).exec();
+  const fresh = await Player.findById(player._id).exec();
+  if (!fresh) throw new ApiError(404, 'Player vanished during reset.');
+  return { before, after: resetView(fresh), refreshedFromRiot };
+}
+
+/**
+ * POST /api/players/reset-all — SERVER RESET: reset every player on this
+ * server (riot refresh + re-seed + zeroed record). Links stay. Admin/bot.
+ * Returns per-player before/after so the caller can show what changed.
+ */
+playersRouter.post(
+  '/reset-all',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const players = await Player.find(guildFilter(req)).sort({ mmr: -1 }).exec();
+    const results: Array<{ id: string; displayName: string; before?: ResetView; after?: ResetView; error?: string }> = [];
+    //Sequential on purpose: Riot dev keys rate-limit hard
+    for (const p of players) {
+      try {
+        const { before, after } = await performReset(p);
+        results.push({ id: p._id.toString(), displayName: p.displayName, before, after });
+      } catch (err) {
+        results.push({ id: p._id.toString(), displayName: p.displayName, error: (err as Error).message });
+      }
+    }
+    res.json({
+      results,
+      reset: results.filter((r) => !r.error).length,
+      failed: results.filter((r) => r.error).length,
+    });
+  }),
+);
+
+/** POST /api/players/:id/reset — PLAYER RESET: one player, same semantics. Admin/bot. */
+playersRouter.post(
+  '/:id/reset',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const player = await loadScopedPlayer(req);
+    const { before, after, refreshedFromRiot } = await performReset(player);
+    const fresh = await Player.findById(player._id).exec();
+    res.json({ player: fresh!.toPublic(), before, after, refreshedFromRiot });
   }),
 );
 

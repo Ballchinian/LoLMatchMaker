@@ -42,8 +42,9 @@ The config files are already here:
    | Variable | Value |
    | -------- | ----- |
    | `MONGODB_URI` | your Atlas connection string |
-   | `ADMIN_TOKEN` | the random token from step 0.3 |
+   | `ADMIN_TOKEN` | the random token from step 0.3 (global site-owner token) |
    | `BOT_TOKEN` | *(optional)* a second token for a Discord bot |
+   | `AUTH_SECRET` | *(optional)* signs per-server website logins; falls back to the tokens above |
    | `RIOT_API_KEY` | your Riot key *(blank = manual entry only)* |
    | `RIOT_REGION` | `europe` \| `americas` \| `asia` \| `sea` |
    | `RIOT_PLATFORM` | `euw1` \| `na1` \| `kr` \| … |
@@ -87,9 +88,14 @@ The config files are already here:
 
 - On **Railway**, set `CLIENT_ORIGIN` to your Netlify URL and let it redeploy.
   (Required for Option B; harmless for Option A.)
-- Open your Netlify site. Top-right **Unlock admin** → paste `ADMIN_TOKEN`. You should now see
-  the inject / tag / confirm controls. Public visitors (no token) can browse and **submit
-  pending** results for you to confirm.
+- In Discord, run **`/setup password:<website admin password>`** — this registers the server
+  with the backend (the FIRST server to register adopts any pre-existing single-tenant data)
+  and posts the **server key** in the #info channel.
+- Open your Netlify site. Top-right **Connect server** → paste the server key (to browse) and
+  the admin password (to unlock admin controls, including the Discord tab). The raw
+  `ADMIN_TOKEN` still works in the password box as a global site-owner unlock.
+- Each Discord server the bot is invited to gets its own isolated players/matches — nothing is
+  shared between servers, and a server's data is only reachable with its unguessable key.
 
 ## Where each detail goes — quick reference
 

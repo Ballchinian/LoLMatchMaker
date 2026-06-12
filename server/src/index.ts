@@ -6,10 +6,13 @@ import { env, riotEnabled, writesProtected } from './config/env';
 import { connectDB, isDbConnected } from './db/connect';
 import { notFound, errorHandler } from './middleware/errors';
 import { requireDb } from './middleware/requireDb';
+import { resolveScope } from './middleware/auth';
 import authRouter from './routes/auth';
 import playersRouter from './routes/players';
 import teamsRouter from './routes/teams';
 import matchesRouter from './routes/matches';
+import serversRouter from './routes/servers';
+import botCommandsRouter from './routes/botCommands';
 
 const app = express();
 
@@ -38,9 +41,12 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRouter);
-app.use('/api/players', requireDb, playersRouter);
-app.use('/api/teams', requireDb, teamsRouter);
-app.use('/api/matches', requireDb, matchesRouter);
+app.use('/api/servers', requireDb, serversRouter);
+//Every data route resolves its per-server scope first (see middleware/auth.ts)
+app.use('/api/players', requireDb, resolveScope, playersRouter);
+app.use('/api/teams', requireDb, resolveScope, teamsRouter);
+app.use('/api/matches', requireDb, resolveScope, matchesRouter);
+app.use('/api/bot-commands', requireDb, resolveScope, botCommandsRouter);
 
 app.use(notFound);
 app.use(errorHandler);

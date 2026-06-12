@@ -18,6 +18,10 @@ const envSchema = z.object({
   ADMIN_TOKEN: z.string().optional().default(''),
   BOT_TOKEN: z.string().optional().default(''),
 
+  // Signs per-server website login tokens. Falls back to ADMIN_TOKEN+BOT_TOKEN;
+  // if all are blank a random per-boot secret is used (logins die on restart).
+  AUTH_SECRET: z.string().optional().default(''),
+
   // Riot integration is optional — without a key the app still works with manual entry.
   RIOT_API_KEY: z.string().optional().default(''),
   RIOT_REGION: z.enum(['americas', 'europe', 'asia', 'sea']).default('europe'),

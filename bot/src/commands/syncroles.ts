@@ -22,7 +22,7 @@ export const syncroles: Command = {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         await ensureAllRoles(guild);
-        const players = await apiGetPlayers();
+        const players = await apiGetPlayers(guild.id);
 
         let synced = 0;
         let skipped = 0;

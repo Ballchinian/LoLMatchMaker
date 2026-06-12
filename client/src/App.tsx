@@ -3,9 +3,11 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getHealth } from './api/client';
 import { AuthControl } from './components/AuthControl';
+import { usePrivileged } from './lib/usePrivileged';
 import PlayersPage from './pages/PlayersPage';
 import TeamBuilderPage from './pages/TeamBuilderPage';
 import MatchesPage from './pages/MatchesPage';
+import DiscordPage from './pages/DiscordPage';
 
 function HealthPill() {
     const { data } = useQuery({ queryKey: ['health'], queryFn: getHealth, staleTime: 30_000 });
@@ -39,6 +41,8 @@ function NavTab({ to, children }: { to: string; children: ReactNode }) {
 }
 
 export default function App() {
+    //The Discord remote tab is admin-only
+    const privileged = usePrivileged();
     return (
         <div className="mx-auto flex min-h-full max-w-6xl flex-col px-4">
         <header className="flex flex-wrap items-center justify-between gap-4 py-6">
@@ -55,6 +59,7 @@ export default function App() {
             <NavTab to="/players">Players</NavTab>
             <NavTab to="/build">Team Builder</NavTab>
             <NavTab to="/matches">Matches</NavTab>
+            {privileged && <NavTab to="/discord">Discord</NavTab>}
             </nav>
             <div className="flex items-center gap-4">
             <HealthPill />
@@ -68,6 +73,7 @@ export default function App() {
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/build" element={<TeamBuilderPage />} />
             <Route path="/matches" element={<MatchesPage />} />
+            <Route path="/discord" element={<DiscordPage />} />
             <Route path="*" element={<Navigate to="/players" replace />} />
             </Routes>
         </main>

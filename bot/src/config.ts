@@ -4,7 +4,9 @@ import { z } from 'zod';
 const schema = z.object({
     DISCORD_TOKEN: z.string().min(1, 'DISCORD_TOKEN is required'),
     DISCORD_CLIENT_ID: z.string().min(1, 'DISCORD_CLIENT_ID is required'),
-    DISCORD_GUILD_ID: z.string().min(1, 'DISCORD_GUILD_ID is required'),
+    // Optional now: the bot serves EVERY guild it's invited to (commands are
+    // registered per guild on startup/join). Kept for the standalone register script.
+    DISCORD_GUILD_ID: z.string().optional(),
 
     // Admin marker role created by /setup; holders count as bot admins. Per guild
     // by design: the bot should work on any server it's invited to.

@@ -4,6 +4,7 @@ import { Player } from '../models/Player';
 import { balanceTeams, type BalancePlayer } from '../services/balance';
 import { effectiveMMR } from '../services/mmr';
 import { ApiError, asyncHandler } from '../middleware/errors';
+import { guildFilter } from '../middleware/auth';
 
 export const teamsRouter = Router();
 
@@ -37,7 +38,7 @@ teamsRouter.post(
       throw new ApiError(400, 'Duplicate player ids in selection.');
     }
 
-    const players = await Player.find({ _id: { $in: uniqueIds } }).exec();
+    const players = await Player.find({ _id: { $in: uniqueIds }, ...guildFilter(req) }).exec();
     if (players.length !== uniqueIds.length) {
       throw new ApiError(404, 'One or more selected players were not found.');
     }

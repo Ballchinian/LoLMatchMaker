@@ -39,16 +39,23 @@ const ALL_TIER_ROLE_NAMES = new Set(Object.values(TIER_DISPLAY));
 async function ensureRole(
     guild: Guild,
     name: string,
-    opts: { color?: ColorResolvable; permissions?: bigint[]; hoist?: boolean } = {},
+    opts: { color?: ColorResolvable; permissions?: bigint[]; hoist?: boolean; mentionable?: boolean } = {},
 ): Promise<Role> {
     const existing = guild.roles.cache.find((r) => r.name === name);
-    if (existing) return existing;
+    if (existing) {
+        //Repair pre-existing roles that should be @mentionable but aren't
+        if (opts.mentionable && !existing.mentionable) {
+            await existing.setMentionable(true, 'Match Maker: role must be mentionable').catch(() => undefined);
+        }
+        return existing;
+    }
     return guild.roles.create({
         name,
         //discord.js deprecated `color` in favour of the gradient capable `colors`
         colors: opts.color !== undefined ? { primaryColor: opts.color } : undefined,
         permissions: opts.permissions ?? [],
         hoist: opts.hoist ?? false,
+        mentionable: opts.mentionable ?? false,
         reason: 'LoL Match Maker',
     });
 }
@@ -72,9 +79,10 @@ export async function ensureLinkedRole(guild: Guild): Promise<Role> {
     return role;
 }
 
-//The admin marker role: grants no Discord permissions, the bot just recognizes it
+//The admin marker role: grants no Discord permissions, the bot just recognizes
+//it. Mentionable so anyone (and the bot's new-match notices) can @ the admins.
 export function ensureAdminRole(guild: Guild): Promise<Role> {
-    return ensureRole(guild, config.ADMIN_ROLE_NAME, { color: 0xd4af37, hoist: false });
+    return ensureRole(guild, config.ADMIN_ROLE_NAME, { color: 0xd4af37, hoist: false, mentionable: true });
 }
 
 //Create the admin + Linked + all tier roles (for first-time setup).

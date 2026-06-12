@@ -17,9 +17,14 @@ export const unlink: Command = {
         ),
 
     async execute(interaction) {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+            await interaction.reply({ content: '❌ Use this in a server.', flags: MessageFlags.Ephemeral });
+            return;
+        }
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const playerOpt = interaction.options.getString('player');
-        const players = await apiGetPlayers();
+        const players = await apiGetPlayers(guildId);
 
         //Admin path: unlink a chosen player.
         if (playerOpt) {
@@ -33,7 +38,7 @@ export const unlink: Command = {
                 return;
             }
             const oldDiscordId = target.discordUserId;
-            await apiLinkDiscord(target.id, null);
+            await apiLinkDiscord(guildId, target.id, null);
             if (oldDiscordId && interaction.guild) {
                 const member = await interaction.guild.members.fetch(oldDiscordId).catch(() => null);
                 if (member) await clearMemberRoles(interaction.guild, member).catch(() => undefined);
@@ -55,7 +60,7 @@ export const unlink: Command = {
         );
         return;
         }
-        await apiLinkDiscord(mine.id, null);
+        await apiLinkDiscord(guildId, mine.id, null);
         if (interaction.guild) {
         const member = await interaction.guild.members.fetch(interaction.user.id).catch(() => null);
         if (member) await clearMemberRoles(interaction.guild, member).catch(() => undefined);
@@ -66,9 +71,13 @@ export const unlink: Command = {
     },
 
     async autocomplete(interaction) {
+        if (!interaction.guildId) {
+            await interaction.respond([]);
+            return;
+        }
         const focused = interaction.options.getFocused().toLowerCase();
         //Tight budget: autocomplete must answer within ~3s or the token dies.
-        const players = await apiGetPlayers(2_000).catch(() => []);
+        const players = await apiGetPlayers(interaction.guildId, 2_000).catch(() => []);
         const choices = players
         .filter((p) => p.discordUserId) // only linked players can be unlinked
         .filter((p) => p.displayName.toLowerCase().includes(focused))

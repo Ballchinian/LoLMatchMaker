@@ -15,21 +15,26 @@ export const link: Command = {
         .addStringOption(champsOption(true)),
 
     async execute(interaction) {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+            await interaction.reply({ content: '❌ Use this in a server.', flags: MessageFlags.Ephemeral });
+            return;
+        }
         const playerId = interaction.options.getString('player', true);
         const champPool = interaction.options.getString('champs', true) as ChampPool;
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         try {
             //If player is linked to discord account, and they are linking to a different player, unlink them
-            const players = await apiGetPlayers();
+            const players = await apiGetPlayers(guildId);
             const current = players.find((p) => p.discordUserId === interaction.user.id);
             let movedFrom = '';
             if (current && current.id !== playerId) {
-                await apiLinkDiscord(current.id, null);
+                await apiLinkDiscord(guildId, current.id, null);
                 movedFrom = current.displayName;
             }
 
-            const player = await apiLinkDiscord(playerId, interaction.user.id);
-            await apiUpdateRoles(playerId, { champPool });
+            const player = await apiLinkDiscord(guildId, playerId, interaction.user.id);
+            await apiUpdateRoles(guildId, playerId, { champPool });
 
             let roleNote = '';
 
@@ -50,9 +55,13 @@ export const link: Command = {
     },
     //Autocomplete for player names: filter to unlinked players matching the input.
     async autocomplete(interaction) {
+        if (!interaction.guildId) {
+            await interaction.respond([]);
+            return;
+        }
         const focused = interaction.options.getFocused().toLowerCase();
         //Tight budget: autocomplete must answer within ~3s or the token dies.
-        const players = await apiGetPlayers(2_000).catch(() => []);
+        const players = await apiGetPlayers(interaction.guildId, 2_000).catch(() => []);
         const choices = players
             .filter((p) => !p.discordUserId) //only unlinked players can be claimed
             .filter((p) => p.displayName.toLowerCase().includes(focused))

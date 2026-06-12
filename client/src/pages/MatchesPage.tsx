@@ -1,6 +1,14 @@
 import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiErrorMessage, confirmMatch, deleteMatch, getMatches, reverseMatch } from '../api/client';
+import {
+    apiErrorMessage,
+    cancelMatch,
+    confirmMatch,
+    deleteMatch,
+    getMatches,
+    getProposalToken,
+    reverseMatch,
+} from '../api/client';
 import type { MatchRecord, RosterEntry } from '../api/types';
 import { usePrivileged } from '../lib/usePrivileged';
 
@@ -47,6 +55,8 @@ function TeamSide({ team, label, highlight }: { team: RosterEntry[]; label: stri
 function PendingCard({ m }: { m: MatchRecord }) {
     const qc = useQueryClient();
     const privileged = usePrivileged();
+    //This browser proposed the match: it may delete its own proposal without admin
+    const mine = getProposalToken(m._id) !== null;
 
     const confirm = useMutation({
         mutationFn: (winner: 'A' | 'B') => confirmMatch(m._id, winner),
@@ -57,6 +67,11 @@ function PendingCard({ m }: { m: MatchRecord }) {
     });
     const discard = useMutation({
         mutationFn: () => deleteMatch(m._id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
+    });
+    //In progress only: back to proposed, nothing deleted ("Cancel" never deletes)
+    const cancel = useMutation({
+        mutationFn: () => cancelMatch(m._id),
         onSuccess: () => qc.invalidateQueries({ queryKey: ['matches'] }),
     });
 
@@ -110,21 +125,58 @@ function PendingCard({ m }: { m: MatchRecord }) {
             <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('B')}>
                 Team B
             </button>
-            {m.status === 'pending' && (
+            {/* Terminology: "Cancel" returns an ACTIVE game to proposed; "Delete" removes a match. */}
+            {m.status === 'inProgress' && (
                 <button
-                className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
-                disabled={discard.isPending}
-                onClick={() => discard.mutate()}
+                className={`${btnGhost} ml-auto border-amber-800/60 text-amber-300`}
+                disabled={cancel.isPending}
+                onClick={() => {
+                    if (window.confirm('Cancel this in-progress game? It returns to Proposed (nothing is deleted) so it can be restarted, confirmed, or deleted later.')) {
+                        cancel.mutate();
+                    }
+                }}
                 >
-                Discard
+                {cancel.isPending ? 'Cancelling…' : 'Cancel match'}
                 </button>
             )}
+            <button
+                className={`${btnGhost} ${m.status === 'inProgress' ? '' : 'ml-auto'} border-rose-800/60 text-rose-300`}
+                disabled={discard.isPending}
+                onClick={() => {
+                    const warning =
+                        m.status === 'inProgress'
+                            ? 'Delete this IN-PROGRESS match? This voids the game entirely (no MMR was applied) and removes it — normally you should Cancel or Confirm instead.'
+                            : 'Delete this proposed match? This removes it entirely.';
+                    if (window.confirm(warning)) discard.mutate();
+                }}
+            >
+                {discard.isPending ? 'Deleting…' : 'Delete match'}
+            </button>
+            </div>
+        ) : mine && m.status === 'pending' ? (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-slate-500">Your proposal — awaiting the lobby/an admin.</p>
+            <button
+                className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
+                disabled={discard.isPending}
+                onClick={() => {
+                    if (window.confirm('Delete your proposal? You can propose a new match afterwards.')) discard.mutate();
+                }}
+            >
+                {discard.isPending ? 'Deleting…' : 'Delete my proposal'}
+            </button>
             </div>
         ) : (
-            <p className="mt-4 text-sm text-slate-500">Awaiting an admin to confirm the winner.</p>
+            <p className="mt-4 text-sm text-slate-500">
+            {m.status === 'inProgress'
+                ? 'Being played on Discord — confirm or cancel it from there (or as an admin).'
+                : 'Awaiting an admin to confirm the winner.'}
+            </p>
         )}
-        {(confirm.isError || discard.isError) && (
-            <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(confirm.error ?? discard.error)}</p>
+        {(confirm.isError || discard.isError || cancel.isError) && (
+            <p className="mt-2 text-sm text-rose-400">
+                {apiErrorMessage(confirm.error ?? discard.error ?? cancel.error)}
+            </p>
         )}
         </Card>
     );

@@ -140,6 +140,10 @@ export interface MatchRecord {
     winner: 'A' | 'B' | null;
     proposedWinner?: 'A' | 'B' | null;
     reportedBy?: string;
+    /** Roster player id of the (non-admin) proposer, if they identified themself. */
+    proposedByPlayer?: string | null;
+    /** Set while inProgress; the bot expires games after ~2 hours. */
+    startedAt?: string | null;
     teamAAvg?: number;
     teamBAvg?: number;
     expectedA?: number;
@@ -158,4 +162,36 @@ export interface HealthInfo {
     db: 'connected' | 'disconnected';
     riot: 'enabled' | 'disabled';
     writeProtection: 'on' | 'off';
+}
+
+/** One queued/finished Discord-tab command (mirrors the backend BotCommand). */
+export interface BotCommandRecord {
+    _id: string;
+    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete';
+    match: string;
+    matchLabel: string;
+    winner?: 'A' | 'B';
+    status: 'queued' | 'running' | 'done' | 'error';
+    result?: string;
+    createdAt: string;
+}
+
+/** Before/after view returned by the player/server reset endpoints. */
+export interface ResetView {
+    displayName: string;
+    mmr: number;
+    seedMMR: number;
+    rd: number;
+    wins: number;
+    losses: number;
+    gamesPlayed: number;
+    riotRank: string | null;
+}
+
+export interface ResetAllResult {
+    id: string;
+    displayName: string;
+    before?: ResetView;
+    after?: ResetView;
+    error?: string;
 }

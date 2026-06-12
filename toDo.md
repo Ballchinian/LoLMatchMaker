@@ -1,6 +1,13 @@
 *Done:*
-> Setup Change to try and not apply bug
+> Match Admins are @mentioned when a match is proposed: the bot announces every new proposal in the commands channel with an @Match Admin ping (the role is now mentionable; existing roles get repaired on /setup).
+> Match lifecycle added to the #info post: propose on the website → /match setup (unanimous) → play (join/split) → /match confirm (auto-detect / admin / vote), plus cancel/delete rules. Admins can do the same from the website's Discord tab.
+> Non-admin proposers are limited to ONE open proposal at a time (enforced server-side via the "I am" player select on the Team Builder). Deleting it frees the slot.
+> A proposer can delete their own proposal without an admin: the website remembers a secret proposal token ("Delete my proposal" on the Matches tab), and on Discord /match delete works directly for the proposer while the match is still proposed.
+> Match chat threads now live as long as the match is in progress (a passed setup vote's thread is kept and renamed; admin/website setups create one). In-progress games auto-expire after ~2 hours: back to proposed, channels AND the thread are removed by the sweep.
+> Match flow implemented as specced: proposed → in progress (unanimous setup, one active game per player — enforced in the backend /start), cancel returns an active game to proposed (admin or majority vote), /match delete removes proposals (proposer/admin/majority vote) or voids an active game (admin or UNANIMOUS lobby vote), /match confirm auto-detects from Riot or falls back to admin/majority vote, completed matches are admin-only (reverse).
+> Website wording aligned: "Delete match" removes a proposal (was "Discard"); "Cancel match" is reserved for in-progress games returning to Proposed.
+> Discord tab on the website (admins only): every /match action as a button per open match (setup/join/split/cancel/confirm with winner picker or auto-detect/delete) + a live command log. Works via a backend command queue the bot polls every ~5s, so no typing /match in Discord.
+> BIG CHANGE — multi-server: the bot now works on every server it's invited to (commands auto-register on join). /setup password:<...> registers the server in MongoDB (password scrypt-hashed) and returns an unguessable server key posted in #info. The website is scoped by that key (no key = no data, so URLs can't be guessed); the password unlocks per-server admin via a signed 30-day token. All players/matches/commands are partitioned by guild id (same person can exist on several servers; Discord links are unique per server). The FIRST server to register adopts the existing single-tenant data — so run /setup password:<...> right after deploying.
+> Player reset + server reset (website only, admins): per-player "Reset player" button and a "Reset ALL players" card on the Players tab. Both confirm first and show before → after (MMR/seed/RD/record/Riot rank). Riot players are re-fetched and re-seeded; W/L/games zeroed; Discord links kept.
 
 *Pending:*
-> Make it so the threads that are generated are just local to the people in that particular match
-> Make it so Match Admins can be @mentioned upon creation

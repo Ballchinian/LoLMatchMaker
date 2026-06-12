@@ -15,6 +15,7 @@ import { MmrEditor } from '../components/MmrEditor';
 import { RolesEditor } from '../components/RolesEditor';
 import { TagPicker } from '../components/TagPicker';
 import { DiscordUnlink } from '../components/DiscordUnlink';
+import { PlayerReset, ServerReset } from '../components/ResetControls';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { collectTags, matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
@@ -308,6 +309,7 @@ function Roster() {
               {privileged && <RolesEditor player={p} />}
               {privileged && <MmrEditor player={p} />}
               {privileged && <DiscordUnlink player={p} />}
+              {privileged && <PlayerReset player={p} />}
             </div>
           </div>
         ))}
@@ -343,6 +345,7 @@ export default function PlayersPage() {
               <RiotSearch />
             )}
             <ManualAdd />
+            <ServerReset />
           </>
         ) : (
           <Card className="border-slate-700/60">

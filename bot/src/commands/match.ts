@@ -12,23 +12,24 @@ import {
     voteKey,
     votesNeededFor,
 } from '../discord/votes';
-import { actionDescription, performAction, resolve } from './matchActions';
+import { actionDescription, matchThreadName, performAction, resolve } from './matchActions';
 
 /*
     The /match command: decides WHO gets to run an action and how (admin runs it
-    directly, an auto detected Riot result applies itself, everything else goes
-    to a vote). The actions live in matchActions.ts, the vote UI in discord/votes.ts.
+    directly, an auto detected Riot result applies itself, the proposer may
+    delete their own proposal, everything else goes to a vote). The actions live
+    in matchActions.ts, the vote UI in discord/votes.ts.
 */
 export const match: Command = {
     data: new SlashCommandBuilder()
         .setName('match')
-        .setDescription('Run inhouse voice channels for a pending match')
+        .setDescription('Run inhouse voice channels for a proposed match')
         .addSubcommand((s) =>
         s
             .setName('setup')
-            .setDescription('Create the channels and send players straight to their team channels')
+            .setDescription('Start a proposed match: create the channels and send players to their team channels')
             .addStringOption((o) =>
-                o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
+                o.setName('match').setDescription('Proposed match').setRequired(true).setAutocomplete(true),
             ),
         )
         .addSubcommand((s) =>
@@ -36,7 +37,7 @@ export const match: Command = {
             .setName('split')
             .setDescription('Move players (back) into their team channels')
             .addStringOption((o) =>
-                o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
+                o.setName('match').setDescription('In-progress match').setRequired(true).setAutocomplete(true),
             ),
         )
         .addSubcommand((s) =>
@@ -44,7 +45,7 @@ export const match: Command = {
             .setName('confirm')
             .setDescription('Confirm the winner (applies MMR), return players to Lobby, delete channels')
             .addStringOption((o) =>
-                o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
+                o.setName('match').setDescription('Match').setRequired(true).setAutocomplete(true),
             )
             .addStringOption((o) =>
             o
@@ -57,9 +58,17 @@ export const match: Command = {
         .addSubcommand((s) =>
         s
             .setName('cancel')
-            .setDescription('Abort: return players to Lobby and delete channels (match stays pending)')
+            .setDescription('Stop an in-progress game: back to proposed, players to Lobby, channels deleted')
             .addStringOption((o) =>
-                o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
+                o.setName('match').setDescription('In-progress match').setRequired(true).setAutocomplete(true),
+            )
+        )
+        .addSubcommand((s) =>
+        s
+            .setName('delete')
+            .setDescription('Delete a match entirely (proposals: proposer/admin/vote; in-progress: admin/unanimous)')
+            .addStringOption((o) =>
+                o.setName('match').setDescription('Match').setRequired(true).setAutocomplete(true),
             )
         )
         .addSubcommand((s) =>
@@ -67,7 +76,7 @@ export const match: Command = {
             .setName('join')
             .setDescription('Bring everyone back into the shared Game Comms channel')
             .addStringOption((o) =>
-                o.setName('match').setDescription('Pending match').setRequired(true).setAutocomplete(true),
+                o.setName('match').setDescription('In-progress match').setRequired(true).setAutocomplete(true),
             ),
         ),
 
@@ -94,7 +103,7 @@ export const match: Command = {
                 : undefined;
         const admin = await isAdmin(interaction);
 
-        const matches = await apiGetMatches();
+        const matches = await apiGetMatches(guild.id);
         const match = matches.find((m) => m._id === matchId);
         if (!match) {
             await interaction.editReply('❌ Match not found.');
@@ -104,13 +113,16 @@ export const match: Command = {
         /*
             Allowed match states per action:
             setup needs pending (an inProgress game is already being played),
-            split/join only make sense mid game, cancel/confirm work for both.
+            split/join only make sense mid game, cancel returns an ACTIVE game to
+            proposed, delete removes a proposal or voids an active game,
+            confirm works for both.
         */
         const allowed: Record<string, ApiMatch['status'][]> = {
             setup: ['pending'],
             split: ['inProgress'],
             join: ['inProgress'],
-            cancel: ['pending', 'inProgress'],
+            cancel: ['inProgress'],
+            delete: ['pending', 'inProgress'],
             confirm: ['pending', 'inProgress'],
         };
         const okStates = allowed[sub] ?? ['pending'];
@@ -121,7 +133,7 @@ export const match: Command = {
         return;
         }
 
-        const players = await apiGetPlayers();
+        const players = await apiGetPlayers(guild.id);
         const label = match.name ?? `#${matchId.slice(-4)}`;
 
         /*
@@ -130,7 +142,7 @@ export const match: Command = {
         */
         let autoDetected = false;
         if (sub === 'confirm' && !winner) {
-            const detected = await apiDetectWinner(matchId).catch(() => null);
+            const detected = await apiDetectWinner(guild.id, matchId).catch(() => null);
             if (detected) {
                 winner = detected.winner;
                 autoDetected = true;
@@ -148,7 +160,7 @@ export const match: Command = {
 
             const closeMsg = `Vote closed, an admin ran \`/match ${sub}\` for ${label} directly.`;
             //Close relevent command /match votes of that game name if we are closing the game state
-            if (sub === 'confirm') closeMatchVotes(matchId, closeMsg);
+            if (sub === 'confirm' || sub === 'delete') closeMatchVotes(matchId, closeMsg);
             //Otherwise just close the specific subcommand vote
             else closeVote(voteKey(matchId, sub), closeMsg);
 
@@ -157,6 +169,18 @@ export const match: Command = {
                 content: autoDetected ? `🔎 Winner auto detected from Riot match history.\n${summary}` : summary,
                 components: [],
             });
+            return;
+        }
+
+        /*
+            The player who proposed a match may delete it themself while it's
+            still just a proposal (e.g. they picked the wrong player) — no vote,
+            no admin. Once the game is in progress this shortcut is gone.
+        */
+        if (sub === 'delete' && match.status === 'pending' && match.proposedByDiscordId === interaction.user.id) {
+            closeMatchVotes(matchId, `Vote closed, the proposer deleted ${label}.`);
+            const summary = await performAction(guild, sub, match, players);
+            await interaction.editReply({ content: summary, components: [] });
             return;
         }
 
@@ -200,7 +224,7 @@ export const match: Command = {
         const a = resolve(match.teamA, byId);
         const b = resolve(match.teamB, byId);
         const eligible = new Set([...a.linked, ...b.linked]);
-        
+
         //linked votes only, so one linked account can make the vote happen, but need 1 at least
         if (eligible.size === 0) {
             await interaction.editReply(
@@ -213,21 +237,24 @@ export const match: Command = {
 
         /*
             Starting a game commits all ten players' evening: setup needs EVERY
-            linked lobby player to approve, not just a majority. Rejections and
-            every other action stay majority.
+            linked lobby player to approve, not just a majority. Deleting an
+            in-progress game voids it entirely and bypasses the normal completion
+            flow, so that's unanimous too. Rejections and everything else stay
+            majority.
         */
-        const approveNeeded = sub === 'setup' ? eligible.size : votesNeeded;
+        const unanimous = sub === 'setup' || (sub === 'delete' && match.status === 'inProgress');
+        const approveNeeded = unanimous ? eligible.size : votesNeeded;
 
         /*
             Revalidate the match is still in an actionable state, then run the
             action: shared by both vote types below.
         */
         const performIfStillPending = async (w: 'A' | 'B' | undefined, passedText: string): Promise<string> => {
-            const fresh = (await apiGetMatches()).find((m) => m._id === matchId);
+            const fresh = (await apiGetMatches(guild.id)).find((m) => m._id === matchId);
             if (!fresh || !okStates.includes(fresh.status)) {
                 return `⚠️ Vote passed, but **${label}** is **${fresh?.status ?? 'deleted'}** now, nothing to do.`;
             }
-            const freshPlayers = await apiGetPlayers();
+            const freshPlayers = await apiGetPlayers(guild.id);
             const summary = await performAction(guild, sub, fresh, freshPlayers, w);
             return `${passedText}\n${summary}`;
         };
@@ -269,8 +296,8 @@ export const match: Command = {
             content:
                 `🗳️ <@${interaction.user.id}> wants to ${desc}.\n` +
                 `${mentions}, vote with the buttons below. ` +
-                (sub === 'setup'
-                    ? `ALL **${eligible.size}** linked player(s) must approve to start; **${votesNeeded}** rejections cancel `
+                (unanimous
+                    ? `ALL **${eligible.size}** linked player(s) must approve; **${votesNeeded}** rejections cancel `
                     : `**${votesNeeded}** of the lobby's **${eligible.size}** linked player(s) either way decides `) +
                 `(expires in ${POLL_DURATION_MS / 60_000} min). Click your vote again to withdraw it.`,
             threadName: `🗳️ ${label}, match chat`,
@@ -280,6 +307,9 @@ export const match: Command = {
                 { id: 'approve', label: 'Approve', emoji: '✅', style: ButtonStyle.Success, needed: approveNeeded },
                 { id: 'reject', label: 'Reject', emoji: '❌', style: ButtonStyle.Danger },
             ],
+            //A passed setup vote starts the game: its chat thread lives on with the match
+            keepThreadOptionId: sub === 'setup' ? 'approve' : undefined,
+            persistThreadName: sub === 'setup' ? matchThreadName(label) : undefined,
             onDecided: (choice) =>
                 choice === 'reject'
                     ? Promise.resolve(`❌ Vote failed, the request to ${desc} was rejected.`)
@@ -290,14 +320,23 @@ export const match: Command = {
     },
 
     async autocomplete(interaction) {
+        const guildId = interaction.guildId;
+        if (!guildId) {
+            await interaction.respond([]);
+            return;
+        }
         const focused = interaction.options.getFocused().toLowerCase();
         const sub = interaction.options.getSubcommand(false);
         //Which match states this subcommand can act on (mirrors execute)
         const wanted: ApiMatch['status'][] =
-            sub === 'setup' ? ['pending'] : sub === 'confirm' ? ['pending', 'inProgress'] : ['inProgress'];
+            sub === 'setup'
+                ? ['pending']
+                : sub === 'confirm' || sub === 'delete'
+                    ? ['pending', 'inProgress']
+                    : ['inProgress'];
 
         //Tight budget: autocomplete must answer within ~3s or the token dies
-        const matches = await apiGetMatches(2_000).catch(() => [] as ApiMatch[]);
+        const matches = await apiGetMatches(guildId, 2_000).catch(() => [] as ApiMatch[]);
         //Lobby name + team sizes only: no player names
         const choices = matches
         .filter((m) => wanted.includes(m.status))

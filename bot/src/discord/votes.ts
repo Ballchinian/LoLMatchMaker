@@ -96,6 +96,14 @@ export async function runVote(opts: {
     options: [VoteOption, VoteOption];
     onDecided: (optionId: string) => Promise<string>;
     expiredText: string;
+    /*
+        If the vote decides on THIS option, the discussion thread is kept open
+        (renamed to persistThreadName) instead of being locked and deleted:
+        a started match keeps its chat thread for as long as it's being played
+        (the sweep deletes it when the match ends).
+    */
+    keepThreadOptionId?: string;
+    persistThreadName?: string;
 }): Promise<void> {
     const { channel, key, content, threadName, eligible, votesNeeded, options, onDecided, expiredText } = opts;
     const needed: [number, number] = [options[0].needed ?? votesNeeded, options[1].needed ?? votesNeeded];
@@ -169,19 +177,28 @@ export async function runVote(opts: {
     collector.on('end', async (_collected, reason) => {
         activeVotes.delete(key);
         const finalRow = voteRow(options, counts(), needed, true);
+        //True once a decided option asked for the thread to live on (see opts)
+        let persistThread = false;
         try {
             if (reason.startsWith('closed:')) {
                 await poll.edit({ content: `⚙️ ${reason.slice('closed:'.length)}`, components: [finalRow] });
                 return;
             }
             if (reason.startsWith('decided:')) {
-                const summary = await onDecided(reason.slice('decided:'.length));
+                const decidedId = reason.slice('decided:'.length);
+                persistThread = opts.keepThreadOptionId !== undefined && decidedId === opts.keepThreadOptionId;
+                //Rename BEFORE acting: the action looks the chat thread up by name
+                if (persistThread && thread && opts.persistThreadName) {
+                    await thread.setName(opts.persistThreadName).catch(() => undefined);
+                }
+                const summary = await onDecided(decidedId);
                 await poll.edit({ content: summary, components: [finalRow] });
                 return;
             }
             await poll.edit({ content: expiredText, components: [finalRow] });
         } catch (err) {
             console.error('[match vote]', err);
+            persistThread = false;
             await poll
                 .edit({
                     content: `❌ The vote ended but the follow-up failed: ${(err as Error).message}`,
@@ -189,18 +206,23 @@ export async function runVote(opts: {
                 })
                 .catch(() => undefined);
         } finally {
-            /*
-                Vote is over, freeze the match chat, then clean both up after a
-                grace period so the channel doesn't accumulate dead polls.
-            */
-            if (thread) {
-                await thread.setLocked(true).catch(() => undefined);
-                await thread.setArchived(true).catch(() => undefined);
+            if (persistThread && thread) {
+                //The match started: its chat thread stays for the whole game
+                setTimeout(() => void poll.delete().catch(() => undefined), POLL_CLEANUP_MS);
+            } else {
+                /*
+                    Vote is over, freeze the match chat, then clean both up after a
+                    grace period so the channel doesn't accumulate dead polls.
+                */
+                if (thread) {
+                    await thread.setLocked(true).catch(() => undefined);
+                    await thread.setArchived(true).catch(() => undefined);
+                }
+                setTimeout(() => {
+                    void thread?.delete().catch(() => undefined);
+                    void poll.delete().catch(() => undefined);
+                }, POLL_CLEANUP_MS);
             }
-            setTimeout(() => {
-                void thread?.delete().catch(() => undefined);
-                void poll.delete().catch(() => undefined);
-            }, POLL_CLEANUP_MS);
         }
     });
 }

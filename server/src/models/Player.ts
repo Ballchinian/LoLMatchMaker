@@ -37,6 +37,8 @@ interface RecentSnapshot {
 
 export interface PlayerAttrs {
   source: PlayerSource;
+  //Discord guild (server) this player belongs to; null = legacy single-tenant data
+  guildId?: string | null;
   uniqueKey: string;
   displayName: string;
   region: string;
@@ -140,7 +142,12 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
   {
     source: { type: String, enum: ['riot', 'manual'], required: true, immutable: true },
 
+    // Which Discord server (tenant) owns this player. Frozen at injection.
+    guildId: { type: String, default: null, index: true, immutable: true },
+
     // Unique, frozen identity — prevents re-upload of the same player.
+    // Guild-scoped entries embed their guildId (e.g. "1234:riot:<puuid>"), so the
+    // same person can exist on two different servers without colliding.
     uniqueKey: { type: String, required: true, unique: true, immutable: true },
 
     displayName: { type: String, required: true, trim: true, immutable: true },
@@ -174,10 +181,16 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: 3 },
     champPool: { type: String, enum: [...CHAMP_POOLS, 'limited'], default: 'diverse' },
 
-    // Discord link (one Discord account ↔ one player). Mutable.
-    discordUserId: { type: String, index: { unique: true, sparse: true } },
+    // Discord link (one Discord account ↔ one player PER SERVER). Mutable.
+    discordUserId: { type: String },
   },
   { timestamps: true },
+);
+
+// One Discord account claims at most one player within a guild (cross-guild is fine).
+playerSchema.index(
+  { guildId: 1, discordUserId: 1 },
+  { unique: true, partialFilterExpression: { discordUserId: { $type: 'string' } } },
 );
 
 playerSchema.methods.liveRD = function liveRD(this: PlayerDoc, now?: Date): number {

@@ -1,18 +1,19 @@
-import { Router } from 'express';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { Router, type Request } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Player, type PlayerDoc } from '../models/Player';
 import { Match, type MatchDoc, type RosterEntry } from '../models/Match';
 import { applyMatchResult, type GlickoPlayer } from '../services/glicko';
 import { findRecentCustomResult } from '../services/riot';
-import { riotEnabled } from '../config/env';
+import { riotEnabled, writesProtected } from '../config/env';
 import { randomLobbyName } from '../services/lobbyName';
 import { ApiError, asyncHandler } from '../middleware/errors';
-import { requireWriter, resolveCreator, type Actor } from '../middleware/auth';
+import { guildFilter, identify, requireWriter, resolveCreator, type Actor } from '../middleware/auth';
 
 export const matchesRouter = Router();
 
-/** Cap on outstanding pending matches, to bound the public submission queue. */
+/** Cap on outstanding pending matches (per server), to bound the public submission queue. */
 const MAX_PENDING = 50;
 
 /** Tighter limit on match creation since it's a public write. */
@@ -28,30 +29,50 @@ const teamsSchema = z.object({
   // Public reporters: the winner they claim + who they are (for admin review).
   proposedWinner: z.enum(['A', 'B']).optional(),
   reportedBy: z.string().max(40).optional(),
+  // Public proposers must say which roster player they are (one open proposal each).
+  proposedByPlayerId: z.string().optional(),
 });
+
+/** Load a match by id within the request's server scope (404 outside it). */
+async function loadScopedMatch(req: Request, opts?: { withToken?: boolean }): Promise<MatchDoc> {
+  let query = Match.findById(req.params.id);
+  if (opts?.withToken) query = query.select('+proposalToken');
+  const match = await query.exec();
+  if (!match || (match.guildId ?? null) !== (req.guildId ?? null)) {
+    throw new ApiError(404, 'Match not found.');
+  }
+  return match;
+}
 
 const confirmSchema = z.object({
   // Optional: defaults to the reporter's proposed winner if omitted.
   winner: z.enum(['A', 'B']).optional(),
 });
 
-/** Load the given player ids, erroring if any are missing or duplicated. */
-async function loadPlayers(teamA: string[], teamB: string[]): Promise<Map<string, PlayerDoc>> {
+/** Load the given player ids (within the guild scope), erroring if any are missing or duplicated. */
+async function loadPlayers(
+  teamA: string[],
+  teamB: string[],
+  guildId: string | null,
+): Promise<Map<string, PlayerDoc>> {
   const overlap = teamA.filter((id) => teamB.includes(id));
   if (overlap.length > 0) throw new ApiError(400, 'A player cannot be on both teams.');
 
   const allIds = [...teamA, ...teamB];
   if (new Set(allIds).size !== allIds.length) throw new ApiError(400, 'Duplicate player ids.');
 
-  const players = await Player.find({ _id: { $in: allIds } }).exec();
+  const players = await Player.find({ _id: { $in: allIds }, guildId }).exec();
   if (players.length !== allIds.length) throw new ApiError(404, 'One or more players were not found.');
 
   return new Map(players.map((p) => [p._id.toString(), p]));
 }
 
-//A lobby name not currently used by another pending match (best-effort, falls back with a suffix)
-async function uniqueLobbyName(): Promise<string> {
-  const pending = await Match.find({ status: 'pending' }).select('name').lean().exec();
+//A lobby name not currently used by another open match on this server (best-effort, falls back with a suffix)
+async function uniqueLobbyName(guildId: string | null): Promise<string> {
+  const pending = await Match.find({ status: { $in: ['pending', 'inProgress'] }, guildId })
+    .select('name')
+    .lean()
+    .exec();
   const taken = new Set(pending.map((m) => m.name).filter(Boolean));
   for (let i = 0; i < 25; i++) {
     const candidate = randomLobbyName();
@@ -77,7 +98,7 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor) {
   const teamBIds = match.teamB.map((e) => e.player.toString());
 
   const now = new Date();
-  const byId = await loadPlayers(teamAIds, teamBIds);
+  const byId = await loadPlayers(teamAIds, teamBIds, match.guildId ?? null);
   const toGlicko = (ids: string[]): GlickoPlayer[] =>
     ids.map((id) => {
       const p = byId.get(id)!;
@@ -167,11 +188,11 @@ async function reverseMatch(match: MatchDoc, actor: Actor) {
 
 /* -------------------------------- routes ------------------------------- */
 
-/** GET /api/matches — all games, newest first (pending + confirmed). Public. */
+/** GET /api/matches — this server's games, newest first (pending + confirmed). Public within scope. */
 matchesRouter.get(
   '/',
-  asyncHandler(async (_req, res) => {
-    const matches = await Match.find().sort({ createdAt: -1 }).limit(100).lean().exec();
+  asyncHandler(async (req, res) => {
+    const matches = await Match.find(guildFilter(req)).sort({ createdAt: -1 }).limit(100).lean().exec();
     res.json({ matches });
   }),
 );
@@ -186,8 +207,7 @@ matchesRouter.get(
   '/:id/detected-winner',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
+    const match = await loadScopedMatch(req);
     if (match.status !== 'pending' && match.status !== 'inProgress') {
       throw new ApiError(409, 'Only pending or in-progress matches have a winner to detect.');
     }
@@ -223,37 +243,71 @@ matchesRouter.post(
   asyncHandler(async (req, res) => {
     const body = teamsSchema.parse(req.body);
     const creator = resolveCreator(req);
-    const byId = await loadPlayers(body.teamA, body.teamB);
+    const guildId = req.guildId ?? null;
+    const byId = await loadPlayers(body.teamA, body.teamB, guildId);
 
     const isPrivileged = creator === 'admin' || creator === 'bot';
 
-    // Public submissions are pending-only and capped to deter spam.
+    let proposedByPlayer: PlayerDoc | null = null;
     if (!isPrivileged) {
-      const pendingCount = await Match.countDocuments({ status: 'pending' }).exec();
+      // Public submissions are pending-only and capped to deter spam.
+      const pendingCount = await Match.countDocuments({ status: 'pending', guildId }).exec();
       if (pendingCount >= MAX_PENDING) {
         throw new ApiError(429, 'Too many matches are awaiting review. Please try again later.');
       }
+
+      // Proposers must identify as one of the roster players...
+      proposedByPlayer = body.proposedByPlayerId ? (byId.get(body.proposedByPlayerId) ?? null) : null;
+      if (!proposedByPlayer) {
+        throw new ApiError(400, 'Pick which of the match\'s players you are before proposing.');
+      }
+      // ...and may only have ONE open proposal at a time (delete it to re-propose).
+      const open = await Match.findOne({
+        guildId,
+        status: { $in: ['pending', 'inProgress'] },
+        proposedByPlayer: proposedByPlayer._id,
+      })
+        .select('name')
+        .lean()
+        .exec();
+      if (open) {
+        throw new ApiError(
+          409,
+          `You already have an open proposal (${open.name ?? 'unnamed'}). Delete it before proposing another match.`,
+        );
+      }
     }
+
+    //Returned once to the proposing browser; lets them delete their own proposal later
+    const proposalToken = isPrivileged ? undefined : randomBytes(24).toString('hex');
 
     const match = await Match.create({
       status: 'pending',
-      name: await uniqueLobbyName(),
+      guildId,
+      name: await uniqueLobbyName(guildId),
       teamA: rosterFrom(body.teamA, byId),
       teamB: rosterFrom(body.teamB, byId),
       winner: null,
       proposedWinner: body.proposedWinner ?? null,
-      reportedBy: body.reportedBy?.trim() || undefined,
+      reportedBy: body.reportedBy?.trim() || proposedByPlayer?.displayName || undefined,
+      proposedByPlayer: proposedByPlayer?._id ?? null,
+      proposedByDiscordId: proposedByPlayer?.discordUserId ?? null,
+      proposalToken,
       createdByActor: creator,
     });
 
     // Only admin/bot may confirm in one shot.
-    if ((creator === 'admin' || creator === 'bot') && body.winner) {
-      const players = await confirmMatch(match, body.winner, creator);
+    if (isPrivileged && body.winner) {
+      const players = await confirmMatch(match, body.winner, creator as Actor);
       res.status(201).json({ match, players });
       return;
     }
 
-    res.status(201).json({ match, players: [] });
+    //match.toJSON would include proposalToken here (we selected it by creating);
+    //strip it from the document and hand it back separately, once.
+    const json = match.toObject() as unknown as Record<string, unknown>;
+    delete json.proposalToken;
+    res.status(201).json({ match: json, players: [], proposalToken });
   }),
 );
 
@@ -266,8 +320,7 @@ matchesRouter.post(
   requireWriter,
   asyncHandler(async (req, res) => {
     const { winner } = confirmSchema.parse(req.body);
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
+    const match = await loadScopedMatch(req);
     if (match.status !== 'pending' && match.status !== 'inProgress') {
       throw new ApiError(409, 'This match has already been confirmed.');
     }
@@ -282,33 +335,59 @@ matchesRouter.post(
   }),
 );
 
-/** POST /api/matches/:id/start — pending -> inProgress (the bot set up the game). Admin/bot. */
+/**
+ * POST /api/matches/:id/start — pending -> inProgress (the bot set up the game). Admin/bot.
+ * A player may only be in ONE active game at a time, admins included.
+ */
 matchesRouter.post(
   '/:id/start',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
+    const match = await loadScopedMatch(req);
     if (match.status !== 'pending') {
       throw new ApiError(409, 'Only pending matches can be started.');
     }
+
+    const rosterIds = [...match.teamA, ...match.teamB].map((e) => e.player);
+    const clash = await Match.findOne({
+      guildId: match.guildId ?? null,
+      status: 'inProgress',
+      _id: { $ne: match._id },
+      $or: [{ 'teamA.player': { $in: rosterIds } }, { 'teamB.player': { $in: rosterIds } }],
+    })
+      .lean()
+      .exec();
+    if (clash) {
+      const inClash = new Set(
+        [...clash.teamA, ...clash.teamB].map((e) => e.player.toString()),
+      );
+      const busy = [...match.teamA, ...match.teamB]
+        .filter((e) => inClash.has(e.player.toString()))
+        .map((e) => e.displayName);
+      throw new ApiError(
+        409,
+        `Already playing in ${clash.name ?? 'another match'}: ${busy.join(', ')}. A player can only be in one active game.`,
+      );
+    }
+
     match.status = 'inProgress';
+    match.startedAt = new Date();
     await match.save();
     res.json({ match });
   }),
 );
 
-/** POST /api/matches/:id/stop — inProgress -> pending (the game setup was cancelled). Admin/bot. */
+/** POST /api/matches/:id/stop — inProgress -> pending (the active game was cancelled). Admin/bot. */
 matchesRouter.post(
   '/:id/stop',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
+    const match = await loadScopedMatch(req);
     if (match.status !== 'inProgress') {
-      throw new ApiError(409, 'Only in-progress matches can be stopped.');
+      throw new ApiError(409, 'Only in-progress matches can be cancelled.');
     }
     match.status = 'pending';
+    match.startedAt = null;
     await match.save();
     res.json({ match });
   }),
@@ -319,8 +398,7 @@ matchesRouter.post(
   '/:id/reverse',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
+    const match = await loadScopedMatch(req);
     if (match.status !== 'confirmed') {
       throw new ApiError(409, 'Only confirmed matches can be reversed.');
     }
@@ -329,16 +407,36 @@ matchesRouter.post(
   }),
 );
 
-/** DELETE /api/matches/:id — discard a PENDING match. Confirmed matches are immutable. */
+/**
+ * DELETE /api/matches/:id — remove a match entirely. Confirmed matches are immutable.
+ * - admin/bot: pending and in-progress matches (in-progress deletion is the
+ *   exceptional "void this game" path; the bot gates it behind a unanimous vote)
+ * - public: only their OWN pending proposal, proven by the X-Proposal-Token
+ *   secret returned when they created it
+ */
 matchesRouter.delete(
   '/:id',
-  requireWriter,
   asyncHandler(async (req, res) => {
-    const match = await Match.findById(req.params.id).exec();
-    if (!match) throw new ApiError(404, 'Match not found.');
-    if (match.status !== 'pending') {
-      throw new ApiError(409, 'Only pending matches can be deleted (cancel in-progress games first).');
+    const match = await loadScopedMatch(req, { withToken: true });
+    const isPrivileged = !writesProtected || identify(req) !== null;
+
+    if (isPrivileged) {
+      if (match.status !== 'pending' && match.status !== 'inProgress') {
+        throw new ApiError(409, 'Confirmed matches can\'t be deleted — reverse them instead.');
+      }
+    } else {
+      if (match.status !== 'pending') {
+        throw new ApiError(409, 'Only pending proposals can be deleted.');
+      }
+      const token = req.header('x-proposal-token')?.trim() ?? '';
+      const expected = match.proposalToken ?? '';
+      const a = Buffer.from(token);
+      const b = Buffer.from(expected);
+      if (!expected || a.length !== b.length || !timingSafeEqual(a, b)) {
+        throw new ApiError(401, 'Only the player who proposed this match (or an admin) can delete it.');
+      }
     }
+
     await match.deleteOne();
     res.json({ ok: true });
   }),

@@ -1,9 +1,18 @@
 import { ChannelType, Client, Events, GatewayIntentBits, MessageFlags, type Guild } from 'discord.js';
 import { config } from './config';
 import { commandMap } from './commands/index';
-import { registerGuildCommands } from './discord/registerCommands';
+import { registerCommandsForGuild, registerCommandsForGuilds } from './discord/registerCommands';
 import { sweepOrphanedChannels } from './discord/voice';
-import { apiGetMatches } from './api';
+import { closeMatchVotes } from './discord/votes';
+import {
+    apiClaimBotCommand,
+    apiCompleteBotCommand,
+    apiGetMatches,
+    apiGetPlayers,
+    apiStopMatch,
+    type ApiMatch,
+} from './api';
+import { fetchCommandThreads, findCommandsChannel, performAction } from './commands/matchActions';
 
 const client = new Client({
     intents: [
@@ -24,47 +33,184 @@ function commandsChannelId(guild: Guild | null): string | null {
     return ch?.id ?? null;
 }
 
-/** How often to check for channels whose match was cancelled/confirmed via the webpage. */
+/** Post in the guild's commands channel (best effort). */
+async function announce(guild: Guild, content: string): Promise<void> {
+    const channel = findCommandsChannel(guild);
+    if (!channel) return;
+    await channel.send(content).catch(() => undefined);
+}
+
+function labelOf(m: ApiMatch): string {
+    return m.name ?? `#${m._id.slice(-4)}`;
+}
+
+/** How often to reconcile channels/threads with the backend's match states. */
 const SWEEP_INTERVAL_MS = 60_000;
+/** An in-progress game should last about 2 hours; after that it auto-expires. */
+const MATCH_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+/** How often to look for website (Discord tab) commands to execute. */
+const QUEUE_POLL_INTERVAL_MS = 5_000;
+
+/*
+    New-proposal announcements: remember which matches each guild has already
+    been told about. Primed silently on the first sweep so a bot restart
+    doesn't re-announce the whole backlog.
+*/
+const announcedByGuild = new Map<string, Set<string>>();
+
+/** Mention the guild's Match Admin role (falls back to plain text if missing). */
+function adminMention(guild: Guild): string {
+    const role = guild.roles.cache.find((r) => r.name === config.ADMIN_ROLE_NAME);
+    return role ? `<@&${role.id}>` : `**${config.ADMIN_ROLE_NAME}s**`;
+}
+
+//Announce proposals this guild hasn't seen yet, @mentioning the Match Admins
+async function announceNewMatches(guild: Guild, matches: ApiMatch[]): Promise<void> {
+    let known = announcedByGuild.get(guild.id);
+    if (!known) {
+        //First sweep after boot: prime with everything that already exists
+        announcedByGuild.set(guild.id, new Set(matches.map((m) => m._id)));
+        return;
+    }
+    for (const m of matches) {
+        if (known.has(m._id)) continue;
+        known.add(m._id);
+        if (m.status !== 'pending') continue;
+        const by = m.reportedBy ? ` by **${m.reportedBy}**` : '';
+        await announce(
+            guild,
+            `📥 ${adminMention(guild)} — new match proposed${by}: **${labelOf(m)}** ` +
+                `(${m.teamA.length}v${m.teamB.length}). Start it with \`/match setup\`.`,
+        );
+    }
+    //Drop ids that no longer exist so the set can't grow forever
+    const live = new Set(matches.map((m) => m._id));
+    for (const id of [...known]) if (!live.has(id)) known.delete(id);
+}
+
+//Expire in-progress games older than ~2h: back to proposed (channels/threads
+//are then torn down by the same sweep pass, since they're no longer active).
+async function expireOverdueMatches(guild: Guild, matches: ApiMatch[]): Promise<void> {
+    const now = Date.now();
+    for (const m of matches) {
+        if (m.status !== 'inProgress') continue;
+        const startedAt = m.startedAt ? Date.parse(m.startedAt) : Date.parse(m.createdAt);
+        if (!Number.isFinite(startedAt) || now - startedAt < MATCH_MAX_AGE_MS) continue;
+        try {
+            await apiStopMatch(guild.id, m._id);
+            m.status = 'pending';
+            closeMatchVotes(m._id, `**${labelOf(m)}** expired after 2 hours.`);
+            await announce(
+                guild,
+                `⏱️ **${labelOf(m)}** has been in progress for over 2 hours — it expired back to **proposed**. ` +
+                    `Channels are being cleaned up; \`/match setup\` to play it, \`/match confirm\` if it actually finished, or \`/match delete\` to drop it.`,
+            );
+        } catch (err) {
+            console.error('[sweep] expire failed:', err);
+        }
+    }
+}
+
+//Delete match chat threads whose match is no longer being played
+async function sweepOrphanedThreads(guild: Guild, activeLabels: Set<string>): Promise<void> {
+    for (const thread of await fetchCommandThreads(guild)) {
+        const m = thread.name.match(/^💬 (.+) — match chat$/u);
+        if (!m || activeLabels.has(m[1]!)) continue;
+        await thread.delete().catch(() => undefined);
+    }
+}
 
 /**
  * The webpage can cancel/confirm/delete a match the bot set channels up for,
- * and the bot never hears about it — so periodically reconcile: any inhouse
- * channel whose match is no longer pending gets its members sent back to
- * Lobby and is deleted.
+ * and the bot never hears about it — so periodically reconcile, per guild:
+ * expire 2h-old games, announce new proposals to the admins, and tear down
+ * channels/threads whose match is no longer in progress.
  */
 async function sweepAllGuilds(): Promise<void> {
-    let active: Set<string>;
-    try {
-        const matches = await apiGetMatches();
-        //Channels belong to games being PLAYED: anything else is an orphan
-        active = new Set(
-        matches.filter((m) => m.status === 'inProgress').map((m) => m.name ?? `#${m._id.slice(-4)}`),
-        );
-    } catch {
-        return; // API unreachable — don't tear anything down on bad data
-    }
     for (const guild of client.guilds.cache.values()) {
+        let matches: ApiMatch[];
         try {
-        const removed = await sweepOrphanedChannels(guild, active);
-        if (removed > 0) {
-            console.log(`[sweep] removed ${removed} channel(s) for non-pending matches in ${guild.name}`);
+            matches = await apiGetMatches(guild.id);
+        } catch {
+            continue; // API unreachable — don't tear anything down on bad data
         }
+        try {
+            await expireOverdueMatches(guild, matches);
+            await announceNewMatches(guild, matches);
+
+            //Channels/threads belong to games being PLAYED: anything else is an orphan
+            const active = new Set(matches.filter((m) => m.status === 'inProgress').map(labelOf));
+            await sweepOrphanedThreads(guild, active);
+            const removed = await sweepOrphanedChannels(guild, active);
+            if (removed > 0) {
+                console.log(`[sweep] removed ${removed} channel(s) for non-active matches in ${guild.name}`);
+            }
         } catch (err) {
-        console.error('[sweep]', err);
+            console.error('[sweep]', err);
         }
+    }
+}
+
+/*
+    Website Discord tab: admins queue match actions on the backend; the bot
+    claims and executes them here, then reports the outcome back AND into the
+    commands channel so the lobby sees what happened.
+*/
+let queueBusy = false;
+async function pollCommandQueue(): Promise<void> {
+    if (queueBusy) return;
+    queueBusy = true;
+    try {
+        for (const guild of client.guilds.cache.values()) {
+            const cmd = await apiClaimBotCommand(guild.id).catch(() => null);
+            if (!cmd) continue;
+            let ok = false;
+            let result: string;
+            try {
+                const matches = await apiGetMatches(guild.id);
+                const match = matches.find((m) => m._id === cmd.match);
+                if (!match) {
+                    result = `❌ Match ${cmd.matchLabel} no longer exists.`;
+                } else {
+                    const players = await apiGetPlayers(guild.id);
+                    if (cmd.action === 'confirm' || cmd.action === 'delete') {
+                        closeMatchVotes(match._id, `Vote closed, an admin ran ${cmd.action} from the website.`);
+                    }
+                    result = await performAction(guild, cmd.action, match, players, cmd.winner);
+                    ok = !result.startsWith('❌');
+                }
+            } catch (err) {
+                result = `❌ ${(err as Error).message}`;
+            }
+            await apiCompleteBotCommand(guild.id, cmd._id, ok, result).catch(() => undefined);
+            await announce(guild, `🌐 Website admin ran \`${cmd.action}\` on **${cmd.matchLabel}**:\n${result}`);
+        }
+    } finally {
+        queueBusy = false;
     }
 }
 
 client.once(Events.ClientReady, async (c) => {
     console.log(`[bot] logged in as ${c.user.tag}`);
     try {
-        const n = await registerGuildCommands();
-        console.log(`[bot] registered ${n} slash command(s)`);
+        const guildIds = [...c.guilds.cache.keys()];
+        const n = await registerCommandsForGuilds(guildIds);
+        console.log(`[bot] registered ${n} slash command(s) across ${guildIds.length} guild(s)`);
     } catch (err) {
         console.error('[bot] command registration failed:', err);
     }
     setInterval(sweepAllGuilds, SWEEP_INTERVAL_MS);
+    setInterval(() => void pollCommandQueue(), QUEUE_POLL_INTERVAL_MS);
+});
+
+//Invited to a new server: make the slash commands available right away
+client.on(Events.GuildCreate, async (guild) => {
+    try {
+        await registerCommandsForGuild(guild.id);
+        console.log(`[bot] joined ${guild.name}, commands registered — an admin should run /setup password:<...>`);
+    } catch (err) {
+        console.error(`[bot] command registration failed for new guild ${guild.name}:`, err);
+    }
 });
 
 /**

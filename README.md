@@ -38,13 +38,28 @@ Every player has two numbers:
 
 This is the same two-layer idea Riot uses (hidden MMR + uncertainty), just with one honest number instead of a hidden one.
 
+# Multi-server (per Discord guild)
+
+Every Discord server the bot is invited to is its own isolated tenant: players, matches and
+bot commands all carry the server's guild id and are never shared between servers.
+
+- `/setup password:<...>` registers the server and returns an unguessable **server key**
+  (posted in the #info channel). Pasting it on the website scopes the site to that server.
+- The **admin password** (scrypt-hashed in MongoDB) is exchanged at login for a signed,
+  expiring token that unlocks admin actions for that server only.
+- All data requests resolve their scope from the token / the bot's `X-Guild-Id` header /
+  the public `X-Server-Key` header — an unknown or missing key sees nothing.
+
 # API Endpoints
 
 ## Health
 - `GET /api/health` — DB / Riot / write-protection status
 
-## Authentication
-- `GET /api/auth/me` 🔒 — Validate a token and return the actor role
+## Authentication & servers
+- `GET /api/auth/me` 🔒 — Validate a token and return the actor role (+ server, if scoped)
+- `POST /api/servers/register` 🔒 — (bot) Register/update a Discord server; returns its key
+- `POST /api/servers/login` — Server key + admin password → per-server admin token
+- `GET /api/servers/lookup?key=` — Resolve a server key to its server name
 
 ## Players
 - `GET /api/players` — List players (strongest first)
@@ -52,13 +67,25 @@ This is the same two-layer idea Riot uses (hidden MMR + uncertainty), just with 
 - `POST /api/players` 🔒 — Inject a player (`riot` or `manual`)
 - `PATCH /api/players/:id/tags` 🔒 — Replace a player's tags
 - `PATCH /api/players/:id/mmr` 🔒 — Admin override of seed MMR, current MMR and/or RD
+- `POST /api/players/:id/reset` 🔒 — Reset one player (riot refresh, re-seed, zero record)
+- `POST /api/players/reset-all` 🔒 — Server reset: the same for every player
 
 ## Teams
 - `POST /api/teams/balance` — Fairest split plus alternative balanced teams
 
 ## Matches
-- `GET /api/matches` — All games (pending and confirmed)
-- `POST /api/matches` 🔒 — Create a matchup; optionally confirm immediately
-- `POST /api/matches/:id/confirm` 🔒 — Confirm a pending match and apply MMR
+- `GET /api/matches` — All games (proposed, in progress and confirmed)
+- `POST /api/matches` 🔒* — Create a matchup; public proposers must identify as a roster
+  player (one open proposal each) and receive a one-time proposal token
+- `POST /api/matches/:id/confirm` 🔒 — Confirm a match and apply MMR
+- `POST /api/matches/:id/start` 🔒 — Proposed → in progress (enforces one active game per player)
+- `POST /api/matches/:id/stop` 🔒 — Cancel: in progress → proposed (nothing deleted)
 - `POST /api/matches/:id/reverse` 🔒 — Reverse MMR changes while keeping history
-- `DELETE /api/matches/:id` 🔒 — Discard a pending match            |
+- `DELETE /api/matches/:id` — Delete a proposed/in-progress match (admin, or the proposer
+  with their `X-Proposal-Token`)
+
+## Discord command queue (website Discord tab)
+- `POST /api/bot-commands` 🔒 — Queue a match action for the bot to run in Discord
+- `GET /api/bot-commands` 🔒 — Recent commands + the bot's outcomes
+- `POST /api/bot-commands/claim` 🔒 — (bot) Claim the oldest queued command
+- `POST /api/bot-commands/:id/complete` 🔒 — (bot) Report the outcome

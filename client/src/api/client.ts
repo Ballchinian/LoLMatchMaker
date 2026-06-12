@@ -2,10 +2,13 @@ import axios from 'axios';
 import type {
     Actor,
     BalanceResult,
+    BotCommandRecord,
     ChampPool,
     HealthInfo,
     MatchRecord,
     Player,
+    ResetAllResult,
+    ResetView,
     SearchResult,
     Tier,
     Division,
@@ -13,18 +16,51 @@ import type {
 
 /** localStorage key holding the admin/bot token (if the user has unlocked). */
 export const TOKEN_KEY = 'lmm_token';
+/** localStorage key holding the Discord server key (which server's data we browse). */
+export const SERVER_KEY = 'lmm_server_key';
+/** localStorage key holding the map of matchId -> proposal token ("my" proposals). */
+export const PROPOSALS_KEY = 'lmm_proposals';
 
 // In dev, '/api' is proxied to the backend by Vite. In production set VITE_API_BASE_URL
 // to your backend's API base (e.g. https://your-app.up.railway.app/api), OR leave it unset
 // and proxy /api via Netlify (see netlify.toml).
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api' });
 
-// Attach the stored token to every request; harmless on public endpoints.
+// Attach the stored token + server scope to every request; harmless on public endpoints.
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) config.headers.Authorization = `Bearer ${token}`;
+    const serverKey = localStorage.getItem(SERVER_KEY);
+    if (serverKey) config.headers['X-Server-Key'] = serverKey;
     return config;
 });
+
+/* ----------------------- "my proposals" registry ------------------------ */
+
+function readProposals(): Record<string, string> {
+    try {
+        return JSON.parse(localStorage.getItem(PROPOSALS_KEY) ?? '{}') as Record<string, string>;
+    } catch {
+        return {};
+    }
+}
+
+/** Remember the secret that lets this browser delete its own proposal. */
+export function rememberProposal(matchId: string, token: string): void {
+    const all = readProposals();
+    all[matchId] = token;
+    localStorage.setItem(PROPOSALS_KEY, JSON.stringify(all));
+}
+
+export function getProposalToken(matchId: string): string | null {
+    return readProposals()[matchId] ?? null;
+}
+
+export function forgetProposal(matchId: string): void {
+    const all = readProposals();
+    delete all[matchId];
+    localStorage.setItem(PROPOSALS_KEY, JSON.stringify(all));
+}
 
 /** Pull a human-readable message out of an axios error. */
 export function apiErrorMessage(err: unknown): string {
@@ -141,7 +177,9 @@ export async function getMatches(): Promise<MatchRecord[]> {
  * Create a matchup.
  * - admin/bot with `winner` → confirmed immediately
  * - admin/bot without `winner` → pending
- * - public → always pending; `proposedWinner`/`reportedBy` recorded for admin review
+ * - public → always pending; must say which roster player they are
+ *   (`proposedByPlayerId`, one open proposal each); the returned
+ *   `proposalToken` lets this browser delete its own proposal later
  */
 export async function createMatch(input: {
     teamA: string[];
@@ -149,8 +187,13 @@ export async function createMatch(input: {
     winner?: 'A' | 'B';
     proposedWinner?: 'A' | 'B';
     reportedBy?: string;
-}): Promise<{ match: MatchRecord; players: Player[] }> {
-    const { data } = await api.post<{ match: MatchRecord; players: Player[] }>('/matches', input);
+    proposedByPlayerId?: string;
+}): Promise<{ match: MatchRecord; players: Player[]; proposalToken?: string }> {
+    const { data } = await api.post<{ match: MatchRecord; players: Player[]; proposalToken?: string }>(
+        '/matches',
+        input,
+    );
+    if (data.proposalToken) rememberProposal(data.match._id, data.proposalToken);
     return data;
 }
 
@@ -165,8 +208,22 @@ export async function confirmMatch(
     return data;
 }
 
+/**
+ * Delete a match. Admins delete any pending/in-progress match; a non-admin
+ * proposer deletes their OWN pending proposal via the stored proposal token.
+ */
 export async function deleteMatch(id: string): Promise<void> {
-     await api.delete(`/matches/${id}`);
+    const token = getProposalToken(id);
+    await api.delete(`/matches/${id}`, {
+        headers: token ? { 'X-Proposal-Token': token } : undefined,
+    });
+    forgetProposal(id);
+}
+
+/** Cancel an in-progress match: back to proposed (nothing is deleted). */
+export async function cancelMatch(id: string): Promise<MatchRecord> {
+    const { data } = await api.post<{ match: MatchRecord }>(`/matches/${id}/stop`, {});
+    return data.match;
 }
 
 /** Reverse a confirmed match: undoes MMR, keeps it in history as reversed. */
@@ -180,7 +237,75 @@ export async function reverseMatch(
 /* -------------------------------- auth --------------------------------- */
 
 /** Validate the current token and return the actor role (throws on invalid). */
-export async function verifyToken(): Promise<{ actor: Actor }> {
-    const { data } = await api.get<{ actor: Actor; writesProtected: boolean }>('/auth/me');
-    return { actor: data.actor };
+export async function verifyToken(): Promise<{ actor: Actor; guildName?: string }> {
+    const { data } = await api.get<{
+        actor: Actor;
+        writesProtected: boolean;
+        guildId: string | null;
+        guildName?: string;
+    }>('/auth/me');
+    return { actor: data.actor, guildName: data.guildName };
+}
+
+/** Exchange a server key + admin password for a per-server admin token. */
+export async function serverLogin(
+    serverKey: string,
+    password: string,
+): Promise<{ token: string; guildId: string; guildName: string }> {
+    const { data } = await api.post<{ token: string; guildId: string; guildName: string }>(
+        '/servers/login',
+        { serverKey, password },
+    );
+    return data;
+}
+
+/** Resolve a server key to its Discord server name (throws on unknown key). */
+export async function lookupServer(serverKey: string): Promise<{ guildId: string; guildName: string }> {
+    const { data } = await api.get<{ guildId: string; guildName: string }>('/servers/lookup', {
+        params: { key: serverKey },
+    });
+    return data;
+}
+
+/* ------------------------------- resets -------------------------------- */
+
+/** Admin: reset one player (riot refresh + re-seed + zeroed record; link kept). */
+export async function resetPlayer(
+    id: string,
+): Promise<{ player: Player; before: ResetView; after: ResetView; refreshedFromRiot: boolean }> {
+    const { data } = await api.post<{
+        player: Player;
+        before: ResetView;
+        after: ResetView;
+        refreshedFromRiot: boolean;
+    }>(`/players/${id}/reset`, {}, { timeout: 60_000 });
+    return data;
+}
+
+/** Admin: reset EVERY player on this server (slow — sequential Riot refetches). */
+export async function resetAllPlayers(): Promise<{ results: ResetAllResult[]; reset: number; failed: number }> {
+    const { data } = await api.post<{ results: ResetAllResult[]; reset: number; failed: number }>(
+        '/players/reset-all',
+        {},
+        { timeout: 300_000 },
+    );
+    return data;
+}
+
+/* --------------------------- Discord commands --------------------------- */
+
+/** Admin: queue a Discord match action for the bot to run. */
+export async function enqueueBotCommand(input: {
+    action: BotCommandRecord['action'];
+    matchId: string;
+    winner?: 'A' | 'B';
+}): Promise<BotCommandRecord> {
+    const { data } = await api.post<{ command: BotCommandRecord }>('/bot-commands', input);
+    return data.command;
+}
+
+/** Admin: recent Discord-tab commands and their outcomes. */
+export async function getBotCommands(): Promise<BotCommandRecord[]> {
+    const { data } = await api.get<{ commands: BotCommandRecord[] }>('/bot-commands');
+    return data.commands;
 }

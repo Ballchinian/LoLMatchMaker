@@ -369,9 +369,11 @@ export default function TeamBuilderPage() {
   const [assign, setAssign] = useState<Assignment>({ a: [], b: [] });
   const [totalValid, setTotalValid] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
-  // Public-submission fields (reporter's name + the winner they claim).
+  // Public-submission fields: who the proposer is (required, one open proposal
+  // each) + the winner they claim.
   const [reportedBy, setReportedBy] = useState('');
   const [proposed, setProposed] = useState<'A' | 'B' | ''>('');
+  const [proposerId, setProposerId] = useState('');
 
   // Press-hold-drag state. Zones are hit-tested against these refs.
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -477,8 +479,12 @@ export default function TeamBuilderPage() {
   });
 
   const save = useMutation({
-    mutationFn: (opts: { winner?: 'A' | 'B'; proposedWinner?: 'A' | 'B'; reportedBy?: string }) =>
-      createMatch({ teamA: assign.a, teamB: assign.b, ...opts }),
+    mutationFn: (opts: {
+      winner?: 'A' | 'B';
+      proposedWinner?: 'A' | 'B';
+      reportedBy?: string;
+      proposedByPlayerId?: string;
+    }) => createMatch({ teamA: assign.a, teamB: assign.b, ...opts }),
     onSuccess: (data, opts) => {
       qc.invalidateQueries({ queryKey: ['matches'] });
       const lobby = data.match.name ? ` "${data.match.name}"` : '';
@@ -488,13 +494,14 @@ export default function TeamBuilderPage() {
       } else {
         setNotice(
           privileged
-            ? `Saved as pending lobby${lobby} — confirm the winner from the Matches tab.`
-            : `Submitted for review${lobby} — an admin will confirm it from the Matches tab.`,
+            ? `Saved as proposed lobby${lobby} — confirm the winner from the Matches tab.`
+            : `Match proposed${lobby} — start it from Discord with /match setup, or wait for an admin. You can delete your own proposal from the Matches tab.`,
         );
       }
       setAssign({ a: [], b: [] });
       setReportedBy('');
       setProposed('');
+      setProposerId('');
       resetExcludeKeys();
     },
     onError: (err) => setNotice(apiErrorMessage(err)),
@@ -624,43 +631,50 @@ export default function TeamBuilderPage() {
                 </div>
                 {save.isError && <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(save.error)}</p>}
                 <p className="mt-2 text-xs text-slate-500">
-                  Confirming applies Elo immediately. "Save as pending" locks the matchup for confirmation later.
+                  Confirming applies MMR immediately. "Save as pending" locks the matchup for confirmation later.
                 </p>
               </div>
             ) : (
               <div className="mt-4 border-t border-slate-800 pt-4">
-                <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Submit for review</p>
+                <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Propose this match</p>
                 <p className="mb-3 text-xs text-slate-500">
-                  Submit this matchup as a pending game. An admin reviews it and confirms the winner
-                  (which applies MMR) or discards it.
+                  Propose this matchup as a game to play. Pick which player YOU are — non-admins can
+                  have one open proposal at a time, and you can delete your own proposal from the
+                  Matches tab. The lobby starts it from Discord with /match setup.
                 </p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <input
-                    className={`${selectCls} w-40`}
-                    value={reportedBy}
-                    onChange={(e) => setReportedBy(e.target.value)}
-                    placeholder="Your name (optional)"
-                    maxLength={40}
-                  />
+                  <span className="text-xs text-slate-500">I am:</span>
+                  <select className={selectCls} value={proposerId} onChange={(e) => setProposerId(e.target.value)}>
+                    <option value="">Pick yourself…</option>
+                    {[...assign.a, ...assign.b].map((id) => (
+                      <option key={id} value={id}>
+                        {byId.get(id)?.displayName ?? id}
+                      </option>
+                    ))}
+                  </select>
                   <span className="text-xs text-slate-500">Winner you claim:</span>
                   <select className={selectCls} value={proposed} onChange={(e) => setProposed(e.target.value as 'A' | 'B' | '')}>
-                    <option value="">Undecided</option>
+                    <option value="">Undecided (not played yet)</option>
                     <option value="A">Team A</option>
                     <option value="B">Team B</option>
                   </select>
                   <button
                     className={btnPrimary}
-                    disabled={!teamsReady || save.isPending}
+                    disabled={!teamsReady || !proposerId || save.isPending}
                     onClick={() =>
                       save.mutate({
                         proposedWinner: proposed || undefined,
                         reportedBy: reportedBy.trim() || undefined,
+                        proposedByPlayerId: proposerId,
                       })
                     }
                   >
-                    Submit for review
+                    Propose match
                   </button>
                   {!teamsReady && <span className="text-xs text-slate-500">Both teams need a player.</span>}
+                  {teamsReady && !proposerId && (
+                    <span className="text-xs text-slate-500">Pick which player you are.</span>
+                  )}
                 </div>
                 {save.isError && <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(save.error)}</p>}
               </div>

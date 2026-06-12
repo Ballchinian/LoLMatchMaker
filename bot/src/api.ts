@@ -1,8 +1,16 @@
 import { config } from './config';
 
-/** Minimal client for the Match Maker backend, authenticated as the `bot` actor. */
+/**
+ * Minimal client for the Match Maker backend, authenticated as the `bot` actor.
+ * Every call names its Discord guild (X-Guild-Id): the backend partitions all
+ * players/matches per server, so the bot must always say which one it means.
+ */
 
-async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+async function req<T>(
+    guildId: string,
+    path: string,
+    init?: RequestInit & { timeoutMs?: number },
+): Promise<T> {
     const { timeoutMs = 15_000, ...rest } = init ?? {};
     const res = await fetch(`${config.API_BASE_URL}${path}`, {
         ...rest,
@@ -12,6 +20,7 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${config.BOT_TOKEN}`,
+            'X-Guild-Id': guildId,
             ...(rest.headers ?? {}),
         },
     });
@@ -27,6 +36,11 @@ export interface ApiPlayer {
     id: string;
     displayName: string;
     mmr: number;
+    seedMMR: number;
+    rd: number;
+    wins: number;
+    losses: number;
+    gamesPlayed: number;
     discordUserId?: string;
     rank: { tier: string; label: string };
 }
@@ -46,41 +60,49 @@ export interface ApiMatch {
     winner: 'A' | 'B' | null;
     proposedWinner?: 'A' | 'B' | null;
     reportedBy?: string;
+    //Discord id of the (non-admin) player who proposed this match, if known
+    proposedByDiscordId?: string | null;
+    //Set while inProgress; drives the ~2h auto-expiry
+    startedAt?: string | null;
     createdAt: string;
 }
 
-export const apiGetPlayers = (timeoutMs?: number) =>
-    req<{ players: ApiPlayer[] }>('/players', { timeoutMs }).then((r) => r.players);
+export const apiGetPlayers = (guildId: string, timeoutMs?: number) =>
+    req<{ players: ApiPlayer[] }>(guildId, '/players', { timeoutMs }).then((r) => r.players);
 
-export const apiGetMatches = (timeoutMs?: number) =>
-    req<{ matches: ApiMatch[] }>('/matches', { timeoutMs }).then((r) => r.matches);
+export const apiGetMatches = (guildId: string, timeoutMs?: number) =>
+    req<{ matches: ApiMatch[] }>(guildId, '/matches', { timeoutMs }).then((r) => r.matches);
 
 //pending -> inProgress (game channels are up, the match is being played)
-export const apiStartMatch = (id: string) =>
-    req<{ match: ApiMatch }>(`/matches/${id}/start`, { method: 'POST' }).then((r) => r.match);
+export const apiStartMatch = (guildId: string, id: string) =>
+    req<{ match: ApiMatch }>(guildId, `/matches/${id}/start`, { method: 'POST' }).then((r) => r.match);
 
-//inProgress -> pending (the game setup was cancelled)
-export const apiStopMatch = (id: string) =>
-    req<{ match: ApiMatch }>(`/matches/${id}/stop`, { method: 'POST' }).then((r) => r.match);
+//inProgress -> pending (the active game was cancelled)
+export const apiStopMatch = (guildId: string, id: string) =>
+    req<{ match: ApiMatch }>(guildId, `/matches/${id}/stop`, { method: 'POST' }).then((r) => r.match);
 
-export const apiConfirmMatch = (id: string, winner: 'A' | 'B') =>
-    req<{ players: ApiPlayer[] }>(`/matches/${id}/confirm`, {
+export const apiConfirmMatch = (guildId: string, id: string, winner: 'A' | 'B') =>
+    req<{ players: ApiPlayer[] }>(guildId, `/matches/${id}/confirm`, {
     method: 'POST',
     body: JSON.stringify({ winner }),
   }).then((r) => r.players);
+
+//Remove a pending/in-progress match entirely (in-progress deletion voids the game)
+export const apiDeleteMatch = (guildId: string, id: string) =>
+    req<{ ok: boolean }>(guildId, `/matches/${id}`, { method: 'DELETE' });
 
 /**
  * Ask the server to find the played custom game in Riot match history.
  * null = couldn't tell (customs aren't guaranteed to be indexed) — ask the humans.
  * Generous timeout: the server fans out several Riot API calls.
  */
-export const apiDetectWinner = (id: string) =>
-    req<{ detected: { winner: 'A' | 'B'; gameId: string } | null }>(`/matches/${id}/detected-winner`, {
+export const apiDetectWinner = (guildId: string, id: string) =>
+    req<{ detected: { winner: 'A' | 'B'; gameId: string } | null }>(guildId, `/matches/${id}/detected-winner`, {
     timeoutMs: 30_000,
   }).then((r) => r.detected);
 
-export const apiLinkDiscord = (playerId: string, discordUserId: string | null) =>
-    req<{ player: ApiPlayer }>(`/players/${playerId}/discord`, {
+export const apiLinkDiscord = (guildId: string, playerId: string, discordUserId: string | null) =>
+    req<{ player: ApiPlayer }>(guildId, `/players/${playerId}/discord`, {
     method: 'PATCH',
     body: JSON.stringify({ discordUserId }),
   }).then((r) => r.player);
@@ -89,10 +111,82 @@ export type ChampPool = 'one-trick' | 'two-trick' | 'diverse';
 
 /** Set a player's champion-pool depth (the only versatility MMR modifier). */
 export const apiUpdateRoles = (
+    guildId: string,
     playerId: string,
     input: { champPool: ChampPool },
 ) =>
-    req<{ player: ApiPlayer }>(`/players/${playerId}/roles`, {
+    req<{ player: ApiPlayer }>(guildId, `/players/${playerId}/roles`, {
     method: 'PATCH',
     body: JSON.stringify(input),
   }).then((r) => r.player);
+
+/* ----------------------- multi-tenancy / setup ------------------------- */
+
+/** /setup registers this guild as a tenant; returns the website server key. */
+export const apiRegisterServer = (guildId: string, guildName: string, password?: string) =>
+    req<{ serverKey: string; created: boolean }>(guildId, '/servers/register', {
+    method: 'POST',
+    body: JSON.stringify({ guildId, guildName, password }),
+  });
+
+/* ------------------------------- resets -------------------------------- */
+
+export interface ApiResetView {
+    displayName: string;
+    mmr: number;
+    seedMMR: number;
+    rd: number;
+    wins: number;
+    losses: number;
+    gamesPlayed: number;
+    riotRank: string | null;
+}
+
+/** Reset one player: riot refresh + re-seeded MMR/RD + zeroed record. Link kept. */
+export const apiResetPlayer = (guildId: string, playerId: string) =>
+    req<{ player: ApiPlayer; before: ApiResetView; after: ApiResetView; refreshedFromRiot: boolean }>(
+        guildId,
+        `/players/${playerId}/reset`,
+        { method: 'POST', timeoutMs: 30_000 },
+    );
+
+export interface ApiResetAllResult {
+    id: string;
+    displayName: string;
+    before?: ApiResetView;
+    after?: ApiResetView;
+    error?: string;
+}
+
+/** Reset EVERY player on this server. Slow with many riot players (sequential refetch). */
+export const apiResetAllPlayers = (guildId: string) =>
+    req<{ results: ApiResetAllResult[]; reset: number; failed: number }>(guildId, '/players/reset-all', {
+        method: 'POST',
+        timeoutMs: 300_000,
+    });
+
+/* --------------------------- command queue ----------------------------- */
+
+export interface ApiBotCommand {
+    _id: string;
+    guildId: string | null;
+    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete';
+    match: string;
+    matchLabel: string;
+    winner?: 'A' | 'B';
+    status: 'queued' | 'running' | 'done' | 'error';
+    result?: string;
+    createdAt: string;
+}
+
+/** Claim the oldest queued website command for this guild (null when idle). */
+export const apiClaimBotCommand = (guildId: string) =>
+    req<{ command: ApiBotCommand | null }>(guildId, '/bot-commands/claim', { method: 'POST', timeoutMs: 8_000 }).then(
+        (r) => r.command,
+    );
+
+export const apiCompleteBotCommand = (guildId: string, id: string, ok: boolean, result: string) =>
+    req<{ command: ApiBotCommand }>(guildId, `/bot-commands/${id}/complete`, {
+        method: 'POST',
+        body: JSON.stringify({ ok, result: result.slice(0, 2000) }),
+    });

@@ -1,5 +1,13 @@
-import type { Guild } from 'discord.js';
-import { apiConfirmMatch, apiStartMatch, apiStopMatch, type ApiMatch, type ApiPlayer, type ApiRosterEntry } from '../api';
+import { ChannelType, ThreadAutoArchiveDuration, type Guild, type TextChannel } from 'discord.js';
+import {
+    apiConfirmMatch,
+    apiDeleteMatch,
+    apiStartMatch,
+    apiStopMatch,
+    type ApiMatch,
+    type ApiPlayer,
+    type ApiRosterEntry,
+} from '../api';
 import {
     createMatchChannels,
     deleteChannels,
@@ -9,11 +17,12 @@ import {
     moveMembers,
 } from '../discord/voice';
 import { syncMemberRoles } from '../discord/roles';
+import { config } from '../config';
 
 /*
-    The actual /match actions (setup, split, confirm, cancel, join), separate
-    from the command itself: the command decides WHO may run an action (admin,
-    auto-confirm, or a vote) and this module is the action.
+    The actual /match actions (setup, split, confirm, cancel, join, delete),
+    separate from the command itself: the command decides WHO may run an action
+    (admin, auto-confirm, or a vote) and this module is the action.
 */
 
 //Split a team's roster into linked Discord ids vs unlinked display names
@@ -28,12 +37,62 @@ export function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>)
     return { linked, unlinked };
 }
 
-//Return players to Lobby (if it exists) and delete the match's channels
+//Name of a match's persistent chat thread (lives while the match is in progress)
+export function matchThreadName(label: string): string {
+    return `💬 ${label} — match chat`;
+}
+
+//Find the commands channel (where votes/threads live), if /setup created it
+export function findCommandsChannel(guild: Guild): TextChannel | null {
+    return (
+        guild.channels.cache.find(
+            (c): c is TextChannel => c.type === ChannelType.GuildText && c.name === config.COMMANDS_CHANNEL_NAME,
+        ) ?? null
+    );
+}
+
+/*
+    Make sure an in-progress match has its chat thread in the commands channel
+    (vote-started matches reuse the vote's discussion thread; admin/website
+    started ones get a fresh one). Best effort.
+*/
+//Active threads in the commands channel (fetched, so it survives bot restarts)
+export async function fetchCommandThreads(guild: Guild) {
+    const channel = findCommandsChannel(guild);
+    if (!channel) return [];
+    const active = await channel.threads.fetchActive().catch(() => null);
+    return active ? [...active.threads.values()] : [...channel.threads.cache.values()];
+}
+
+async function ensureMatchThread(guild: Guild, label: string): Promise<void> {
+    const channel = findCommandsChannel(guild);
+    if (!channel) return;
+    const name = matchThreadName(label);
+    const threads = await fetchCommandThreads(guild);
+    if (threads.some((t) => t.name === name)) return;
+    await channel.threads
+        .create({
+            name,
+            autoArchiveDuration: ThreadAutoArchiveDuration.OneDay,
+            reason: 'Match Maker: in-progress match chat',
+        })
+        .catch(() => undefined);
+}
+
+//Delete the match's chat thread (the match stopped being in progress)
+export async function deleteMatchThread(guild: Guild, label: string): Promise<void> {
+    const name = matchThreadName(label);
+    const threads = (await fetchCommandThreads(guild)).filter((t) => t.name === name);
+    for (const t of threads) await t.delete().catch(() => undefined);
+}
+
+//Return players to Lobby (if it exists) and delete the match's channels + chat thread
 async function teardown(guild: Guild, memberIds: string[], label: string) {
     const lobby = findLobbyChannel(guild);
     if (lobby) {
         await moveMembers(guild, memberIds, lobby.id);
     }
+    await deleteMatchThread(guild, label);
     const found = findMatchChannels(guild, label);
     return deleteChannels(
         guild,
@@ -69,9 +128,11 @@ async function runSetup(
     );
     const movedA = await moveMembers(guild, aLinked, channels.teamAId);
     const movedB = await moveMembers(guild, bLinked, channels.teamBId);
+    await ensureMatchThread(guild, label);
     return (
         `✔️ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
         '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to re-send them to their teams.' +
+        '\n⏱️ In-progress games auto-expire after ~2 hours (back to proposed, channels removed).' +
         (unlinked.length
             ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`
             : '')
@@ -79,9 +140,9 @@ async function runSetup(
 }
 
 /*
-    Execute a /match subcommand against a (still pending) match and return the
-    outcome message. Used directly by admins and by approved non-admin votes,
-    so every action validates its own preconditions here.
+    Execute a /match subcommand against a match and return the outcome message.
+    Used directly by admins, by approved non-admin votes and by the website's
+    Discord tab, so every action validates its own preconditions here.
 */
 export async function performAction(
     guild: Guild,
@@ -98,7 +159,7 @@ export async function performAction(
 
     if (sub === 'setup') {
         if (match.status !== 'pending') {
-        return `⚠️ ${label} is **${match.status}** — only a pending match can be set up.`;
+        return `⚠️ ${label} is **${match.status}** — only a proposed match can be set up.`;
         }
         const already = findMatchChannels(guild, label);
         if (already.all.length > 0) {
@@ -107,10 +168,17 @@ export async function performAction(
             'Run `/match cancel` first if you want to recreate them.'
         );
         }
-        const summary = await runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]);
-        //Mark the game as being played: hides it from further /match setup
-        await apiStartMatch(match._id).catch(() => undefined);
-        return summary;
+        /*
+            Start FIRST: the backend enforces one active game per player, so a
+            blocked start must not leave channels behind. Channels only get
+            created once the match is officially in progress.
+        */
+        try {
+            await apiStartMatch(guild.id, match._id);
+        } catch (err) {
+            return `❌ Couldn't start ${label}: ${(err as Error).message}`;
+        }
+        return runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]);
     }
 
     if (sub === 'split') {
@@ -123,7 +191,7 @@ export async function performAction(
 
     if (sub === 'confirm') {
         if (winner !== 'A' && winner !== 'B') return '❌ No winner specified.';
-        const updated = await apiConfirmMatch(match._id, winner); //applies MMR; match -> confirmed
+        const updated = await apiConfirmMatch(guild.id, match._id, winner); //applies MMR; match -> confirmed
 
         //Resync rank roles for participants whose MMR (and maybe rank) just changed.
         for (const p of updated) {
@@ -140,13 +208,32 @@ export async function performAction(
     }
 
     if (sub === 'cancel') {
+        if (match.status !== 'inProgress') {
+        return `⚠️ ${label} is **${match.status}** — only an in-progress game can be cancelled (use \`/match delete\` to remove a proposal).`;
+        }
         const { deleted, errors } = await teardown(guild, allLinked, label);
-        //Back to pending: the match can be set up again
-        if (match.status === 'inProgress') await apiStopMatch(match._id).catch(() => undefined);
+        //Back to pending: the match can be reviewed, restarted, or deleted later
+        await apiStopMatch(guild.id, match._id).catch(() => undefined);
         return withErrors(
         `✔️ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
-            'The match is back to pending, so you can `/match setup` again.',
+            'The match is back to **proposed**, so it can be set up again or deleted.',
         errors,
+        );
+    }
+
+    if (sub === 'delete') {
+        const wasInProgress = match.status === 'inProgress';
+        try {
+            await apiDeleteMatch(guild.id, match._id);
+        } catch (err) {
+            return `❌ Couldn't delete ${label}: ${(err as Error).message}`;
+        }
+        const { deleted, errors } = await teardown(guild, allLinked, label);
+        return withErrors(
+            wasInProgress
+                ? `🗑️ Deleted **${label}** mid-game — the match is voided (no MMR was applied), players returned to Lobby, ${deleted} channel(s) removed.`
+                : `🗑️ Deleted the proposal **${label}**.`,
+            errors,
         );
     }
 
@@ -174,7 +261,9 @@ export function actionDescription(sub: string, label: string, winner?: 'A' | 'B'
         case 'confirm':
         return `confirm **Team ${winner}** won **${label}** (applies MMR!)`;
         case 'cancel':
-        return `cancel **${label}** (everyone back to Lobby, channels deleted)`;
+        return `cancel **${label}** (back to proposed, everyone to Lobby, channels deleted)`;
+        case 'delete':
+        return `delete **${label}** entirely`;
         default:
         return `run \`${sub}\` on **${label}**`;
     }
