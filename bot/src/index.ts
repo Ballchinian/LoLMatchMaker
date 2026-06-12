@@ -34,18 +34,19 @@ const SWEEP_INTERVAL_MS = 60_000;
  * Lobby and is deleted.
  */
 async function sweepAllGuilds(): Promise<void> {
-    let pending: Set<string>;
+    let active: Set<string>;
     try {
         const matches = await apiGetMatches();
-        pending = new Set(
-        matches.filter((m) => m.status === 'pending').map((m) => m.name ?? `#${m._id.slice(-4)}`),
+        //Channels belong to games being PLAYED: anything else is an orphan
+        active = new Set(
+        matches.filter((m) => m.status === 'inProgress').map((m) => m.name ?? `#${m._id.slice(-4)}`),
         );
     } catch {
         return; // API unreachable — don't tear anything down on bad data
     }
     for (const guild of client.guilds.cache.values()) {
         try {
-        const removed = await sweepOrphanedChannels(guild, pending);
+        const removed = await sweepOrphanedChannels(guild, active);
         if (removed > 0) {
             console.log(`[sweep] removed ${removed} channel(s) for non-pending matches in ${guild.name}`);
         }

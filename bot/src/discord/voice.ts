@@ -57,6 +57,20 @@ function lockOverwrites(guild: Guild, allowMemberIds: string[]): OverwriteResolv
         })),
     ];
     
+    /*
+        Linked members can SEE every match channel (the @everyone View Channels
+        gate hides them otherwise); CONNECTING stays restricted to the listed
+        players via the member overwrites above.
+    */
+    const linked = guild.roles.cache.find((r) => r.name === config.LINKED_ROLE_NAME);
+    if (linked) {
+        overwrites.push({
+            id: linked.id,
+            type: OverwriteType.Role,
+            allow: [PermissionFlagsBits.ViewChannel],
+        });
+    }
+
     //Ensure the bot can always see/manage/move within the channels it creates,
     const meId = guild.members.me?.id;
     if (meId) {
@@ -175,14 +189,14 @@ function labelFromChannelName(name: string): string | null {
 }
 
 /*
-    Tear down channels whose match is no longer pending — e.g. it was cancelled,
-    deleted, or confirmed from the WEBPAGE, which the bot otherwise never hears
-    about. Members are returned to Lobby first. Only touches voice channels
-    inside the inhouse category that follow our naming scheme.
- */
+    Tear down channels whose match is no longer IN PROGRESS — e.g. it was
+    cancelled, deleted, or confirmed from the WEBPAGE, which the bot otherwise
+    never hears about. Members are returned to Lobby first. Only touches voice
+    channels inside the inhouse category that follow our naming scheme.
+*/
 export async function sweepOrphanedChannels(
     guild: Guild,
-    pendingLabels: Set<string>,
+    activeLabels: Set<string>,
 ): Promise<number> {
     const category = guild.channels.cache.find(
         (c) => c.type === ChannelType.GuildCategory && c.name === config.INHOUSE_CATEGORY,
@@ -192,7 +206,7 @@ export async function sweepOrphanedChannels(
     const orphaned = [...guild.channels.cache.values()].filter((c): c is VoiceChannel => {
         if (c.type !== ChannelType.GuildVoice || c.parentId !== category.id) return false;
         const label = labelFromChannelName(c.name);
-        return label !== null && !pendingLabels.has(label);
+        return label !== null && !activeLabels.has(label);
     });
     if (orphaned.length === 0) return 0;
 

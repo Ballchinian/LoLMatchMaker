@@ -39,7 +39,7 @@ export interface ApiRosterEntry {
 
 export interface ApiMatch {
     _id: string;
-    status: 'pending' | 'confirmed' | 'reversed';
+    status: 'pending' | 'inProgress' | 'confirmed' | 'reversed';
     name?: string;
     teamA: ApiRosterEntry[];
     teamB: ApiRosterEntry[];
@@ -54,6 +54,14 @@ export const apiGetPlayers = (timeoutMs?: number) =>
 
 export const apiGetMatches = (timeoutMs?: number) =>
     req<{ matches: ApiMatch[] }>('/matches', { timeoutMs }).then((r) => r.matches);
+
+//pending -> inProgress (game channels are up, the match is being played)
+export const apiStartMatch = (id: string) =>
+    req<{ match: ApiMatch }>(`/matches/${id}/start`, { method: 'POST' }).then((r) => r.match);
+
+//inProgress -> pending (the game setup was cancelled)
+export const apiStopMatch = (id: string) =>
+    req<{ match: ApiMatch }>(`/matches/${id}/stop`, { method: 'POST' }).then((r) => r.match);
 
 export const apiConfirmMatch = (id: string, winner: 'A' | 'B') =>
     req<{ players: ApiPlayer[] }>(`/matches/${id}/confirm`, {

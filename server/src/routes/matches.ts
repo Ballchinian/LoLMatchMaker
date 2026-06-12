@@ -188,7 +188,9 @@ matchesRouter.get(
   asyncHandler(async (req, res) => {
     const match = await Match.findById(req.params.id).exec();
     if (!match) throw new ApiError(404, 'Match not found.');
-    if (match.status !== 'pending') throw new ApiError(409, 'Only pending matches have a winner to detect.');
+    if (match.status !== 'pending' && match.status !== 'inProgress') {
+      throw new ApiError(409, 'Only pending or in-progress matches have a winner to detect.');
+    }
 
     const allIds = [...match.teamA, ...match.teamB].map((e) => e.player.toString());
     const players = await Player.find({ _id: { $in: allIds } }).exec();
@@ -266,7 +268,9 @@ matchesRouter.post(
     const { winner } = confirmSchema.parse(req.body);
     const match = await Match.findById(req.params.id).exec();
     if (!match) throw new ApiError(404, 'Match not found.');
-    if (match.status !== 'pending') throw new ApiError(409, 'This match has already been confirmed.');
+    if (match.status !== 'pending' && match.status !== 'inProgress') {
+      throw new ApiError(409, 'This match has already been confirmed.');
+    }
 
     const effectiveWinner = winner ?? match.proposedWinner ?? null;
     if (effectiveWinner !== 'A' && effectiveWinner !== 'B') {
@@ -275,6 +279,38 @@ matchesRouter.post(
 
     const players = await confirmMatch(match, effectiveWinner, req.actor!);
     res.json({ match, players });
+  }),
+);
+
+/** POST /api/matches/:id/start — pending -> inProgress (the bot set up the game). Admin/bot. */
+matchesRouter.post(
+  '/:id/start',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const match = await Match.findById(req.params.id).exec();
+    if (!match) throw new ApiError(404, 'Match not found.');
+    if (match.status !== 'pending') {
+      throw new ApiError(409, 'Only pending matches can be started.');
+    }
+    match.status = 'inProgress';
+    await match.save();
+    res.json({ match });
+  }),
+);
+
+/** POST /api/matches/:id/stop — inProgress -> pending (the game setup was cancelled). Admin/bot. */
+matchesRouter.post(
+  '/:id/stop',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const match = await Match.findById(req.params.id).exec();
+    if (!match) throw new ApiError(404, 'Match not found.');
+    if (match.status !== 'inProgress') {
+      throw new ApiError(409, 'Only in-progress matches can be stopped.');
+    }
+    match.status = 'pending';
+    await match.save();
+    res.json({ match });
   }),
 );
 
@@ -301,7 +337,7 @@ matchesRouter.delete(
     const match = await Match.findById(req.params.id).exec();
     if (!match) throw new ApiError(404, 'Match not found.');
     if (match.status !== 'pending') {
-      throw new ApiError(409, 'Confirmed matches cannot be deleted (they affected MMR).');
+      throw new ApiError(409, 'Only pending matches can be deleted (cancel in-progress games first).');
     }
     await match.deleteOne();
     res.json({ ok: true });

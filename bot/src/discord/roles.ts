@@ -54,10 +54,22 @@ async function ensureRole(
 }
 
 //The access role (created with View Channel + Connect so granting it = server access)
-export function ensureLinkedRole(guild: Guild): Promise<Role> {
-    return ensureRole(guild, config.LINKED_ROLE_NAME, {
+export async function ensureLinkedRole(guild: Guild): Promise<Role> {
+    const role = await ensureRole(guild, config.LINKED_ROLE_NAME, {
         permissions: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect],
     });
+    /*
+        ensureRole returns pre existing roles untouched, so a Linked role made by
+        hand (or by older bot code) may lack the gate permissions: members hold
+        the role yet still can't see channels. Repair it.
+    */
+    if (!role.permissions.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect])) {
+        await role.setPermissions(
+            role.permissions.bitfield | PermissionFlagsBits.ViewChannel | PermissionFlagsBits.Connect,
+            'Match Maker: access role needs View Channels + Connect',
+        );
+    }
+    return role;
 }
 
 //The admin marker role: grants no Discord permissions, the bot just recognizes it

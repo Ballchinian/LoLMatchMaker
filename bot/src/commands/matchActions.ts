@@ -1,5 +1,5 @@
 import type { Guild } from 'discord.js';
-import { apiConfirmMatch, type ApiMatch, type ApiPlayer, type ApiRosterEntry } from '../api';
+import { apiConfirmMatch, apiStartMatch, apiStopMatch, type ApiMatch, type ApiPlayer, type ApiRosterEntry } from '../api';
 import {
     createMatchChannels,
     deleteChannels,
@@ -97,6 +97,9 @@ export async function performAction(
     const label = match.name ?? `#${match._id.slice(-4)}`;
 
     if (sub === 'setup') {
+        if (match.status !== 'pending') {
+        return `⚠️ ${label} is **${match.status}** — only a pending match can be set up.`;
+        }
         const already = findMatchChannels(guild, label);
         if (already.all.length > 0) {
         return (
@@ -104,7 +107,10 @@ export async function performAction(
             'Run `/match cancel` first if you want to recreate them.'
         );
         }
-        return runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]);
+        const summary = await runSetup(guild, label, a.linked, b.linked, [...a.unlinked, ...b.unlinked]);
+        //Mark the game as being played: hides it from further /match setup
+        await apiStartMatch(match._id).catch(() => undefined);
+        return summary;
     }
 
     if (sub === 'split') {
@@ -135,9 +141,11 @@ export async function performAction(
 
     if (sub === 'cancel') {
         const { deleted, errors } = await teardown(guild, allLinked, label);
+        //Back to pending: the match can be set up again
+        if (match.status === 'inProgress') await apiStopMatch(match._id).catch(() => undefined);
         return withErrors(
         `✔️ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
-            'The match is still pending, so you can `/match setup` again.',
+            'The match is back to pending, so you can `/match setup` again.',
         errors,
         );
     }

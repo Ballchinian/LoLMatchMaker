@@ -101,10 +101,22 @@ export const match: Command = {
             return;
         }
 
-        //Every /match action operates on a PENDING game only (hidden on discord side)
-        if (match.status !== 'pending') {
+        /*
+            Allowed match states per action:
+            setup needs pending (an inProgress game is already being played),
+            split/join only make sense mid game, cancel/confirm work for both.
+        */
+        const allowed: Record<string, ApiMatch['status'][]> = {
+            setup: ['pending'],
+            split: ['inProgress'],
+            join: ['inProgress'],
+            cancel: ['pending', 'inProgress'],
+            confirm: ['pending', 'inProgress'],
+        };
+        const okStates = allowed[sub] ?? ['pending'];
+        if (!okStates.includes(match.status)) {
         await interaction.editReply(
-            `❌ That match is **${match.status}**, only pending matches can be managed.`,
+            `❌ That match is **${match.status}**, \`/match ${sub}\` needs a ${okStates.join(' or ')} match.`,
         );
         return;
         }
@@ -200,13 +212,20 @@ export const match: Command = {
         const mentions = [...eligible].map((id) => `<@${id}>`).join(' ');
 
         /*
-            Revalidate the match is still pending, then run the action: shared
-            by both vote types below.
+            Starting a game commits all ten players' evening: setup needs EVERY
+            linked lobby player to approve, not just a majority. Rejections and
+            every other action stay majority.
+        */
+        const approveNeeded = sub === 'setup' ? eligible.size : votesNeeded;
+
+        /*
+            Revalidate the match is still in an actionable state, then run the
+            action: shared by both vote types below.
         */
         const performIfStillPending = async (w: 'A' | 'B' | undefined, passedText: string): Promise<string> => {
             const fresh = (await apiGetMatches()).find((m) => m._id === matchId);
-            if (!fresh || fresh.status !== 'pending') {
-                return `⚠️ Vote passed, but **${label}** is no longer pending, nothing to do.`;
+            if (!fresh || !okStates.includes(fresh.status)) {
+                return `⚠️ Vote passed, but **${label}** is **${fresh?.status ?? 'deleted'}** now, nothing to do.`;
             }
             const freshPlayers = await apiGetPlayers();
             const summary = await performAction(guild, sub, fresh, freshPlayers, w);
@@ -250,13 +269,15 @@ export const match: Command = {
             content:
                 `🗳️ <@${interaction.user.id}> wants to ${desc}.\n` +
                 `${mentions}, vote with the buttons below. ` +
-                `**${votesNeeded}** of the lobby's **${eligible.size}** linked player(s) either way decides ` +
+                (sub === 'setup'
+                    ? `ALL **${eligible.size}** linked player(s) must approve to start; **${votesNeeded}** rejections cancel `
+                    : `**${votesNeeded}** of the lobby's **${eligible.size}** linked player(s) either way decides `) +
                 `(expires in ${POLL_DURATION_MS / 60_000} min). Click your vote again to withdraw it.`,
             threadName: `🗳️ ${label}, match chat`,
             eligible,
             votesNeeded,
             options: [
-                { id: 'approve', label: 'Approve', emoji: '✅', style: ButtonStyle.Success },
+                { id: 'approve', label: 'Approve', emoji: '✅', style: ButtonStyle.Success, needed: approveNeeded },
                 { id: 'reject', label: 'Reject', emoji: '❌', style: ButtonStyle.Danger },
             ],
             onDecided: (choice) =>
@@ -265,22 +286,25 @@ export const match: Command = {
                     : performIfStillPending(winner, '🗳️ Vote passed!'),
             expiredText: `⏰ The vote to ${desc} expired without enough votes.`,
         });
-        await interaction.editReply(`🗳️ Vote opened for ${label}, ${votesNeeded} ✅ and it happens.`);
+        await interaction.editReply(`🗳️ Vote opened for ${label}, ${approveNeeded} ✅ and it happens.`);
     },
 
     async autocomplete(interaction) {
         const focused = interaction.options.getFocused().toLowerCase();
+        const sub = interaction.options.getSubcommand(false);
+        //Which match states this subcommand can act on (mirrors execute)
+        const wanted: ApiMatch['status'][] =
+            sub === 'setup' ? ['pending'] : sub === 'confirm' ? ['pending', 'inProgress'] : ['inProgress'];
+
         //Tight budget: autocomplete must answer within ~3s or the token dies
         const matches = await apiGetMatches(2_000).catch(() => [] as ApiMatch[]);
-        /*
-            Only pending games are manageable, so only those appear in the picker.
-            Lobby name + team sizes only: no player names.
-        */
+        //Lobby name + team sizes only: no player names
         const choices = matches
-        .filter((m) => m.status === 'pending')
+        .filter((m) => wanted.includes(m.status))
         .map((m) => {
             const label = m.name ?? `#${m._id.slice(-4)}`;
-            return { name: `${label} (${m.teamA.length}v${m.teamB.length})`.slice(0, 100), value: m._id };
+            const playing = m.status === 'inProgress' ? ' • in game' : '';
+            return { name: `${label} (${m.teamA.length}v${m.teamB.length})${playing}`.slice(0, 100), value: m._id };
         })
         .filter((c) => c.name.toLowerCase().includes(focused))
         .slice(0, 25);

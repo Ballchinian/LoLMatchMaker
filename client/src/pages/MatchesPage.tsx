@@ -64,9 +64,15 @@ function PendingCard({ m }: { m: MatchRecord }) {
         <Card className="border-amber-700/40">
         <div className="mb-3 flex items-center justify-between text-xs">
             <span className="flex items-center gap-2">
-            <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
+            {m.status === 'inProgress' ? (
+                <span className="rounded-full border border-sky-700/50 bg-sky-900/30 px-2 py-0.5 font-semibold text-sky-300">
+                In game
+                </span>
+            ) : (
+                <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
                 Pending
-            </span>
+                </span>
+            )}
             {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
             </span>
             <span className="text-slate-500">
@@ -104,13 +110,15 @@ function PendingCard({ m }: { m: MatchRecord }) {
             <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('B')}>
                 Team B
             </button>
-            <button
+            {m.status === 'pending' && (
+                <button
                 className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
                 disabled={discard.isPending}
                 onClick={() => discard.mutate()}
-            >
+                >
                 Discard
-            </button>
+                </button>
+            )}
             </div>
         ) : (
             <p className="mt-4 text-sm text-slate-500">Awaiting an admin to confirm the winner.</p>
@@ -207,17 +215,18 @@ export default function MatchesPage() {
         </Card>
         );
 
-    const pending = data.filter((m) => m.status === 'pending');
-    const history = data.filter((m) => m.status !== 'pending'); // confirmed + reversed, newest first
+    //Open = pending (awaiting result) + inProgress (being played on Discord)
+    const open = data.filter((m) => m.status === 'pending' || m.status === 'inProgress');
+    const history = data.filter((m) => m.status === 'confirmed' || m.status === 'reversed');
 
     return (
         <div className="space-y-6">
-        {pending.length > 0 && (
+        {open.length > 0 && (
             <section className="space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-400">
-                Pending ({pending.length})
+                Open ({open.length})
             </h2>
-            {pending.map((m) => (
+            {open.map((m) => (
                 <PendingCard key={m._id} m={m} />
             ))}
             </section>

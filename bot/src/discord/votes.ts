@@ -60,15 +60,17 @@ export interface VoteOption {
     label: string;
     emoji: string;
     style: ButtonStyle;
+    //Votes required for THIS option to win; defaults to the vote's votesNeeded
+    needed?: number;
 }
 
 //Button row for a two-option vote, live counts baked into the labels
-function voteRow(options: [VoteOption, VoteOption], counts: [number, number], needed: number, disabled = false) {
+function voteRow(options: [VoteOption, VoteOption], counts: [number, number], needed: [number, number], disabled = false) {
     return new ActionRowBuilder<ButtonBuilder>().addComponents(
         ...options.map((o, i) =>
             new ButtonBuilder()
                 .setCustomId(`vote-${o.id}`)
-                .setLabel(`${o.label} (${counts[i]}/${needed})`)
+                .setLabel(`${o.label} (${counts[i]}/${needed[i]})`)
                 .setEmoji(o.emoji)
                 .setStyle(o.style)
                 .setDisabled(disabled),
@@ -96,8 +98,9 @@ export async function runVote(opts: {
     expiredText: string;
 }): Promise<void> {
     const { channel, key, content, threadName, eligible, votesNeeded, options, onDecided, expiredText } = opts;
+    const needed: [number, number] = [options[0].needed ?? votesNeeded, options[1].needed ?? votesNeeded];
 
-    const poll = await channel.send({ content, components: [voteRow(options, [0, 0], votesNeeded)] });
+    const poll = await channel.send({ content, components: [voteRow(options, [0, 0], needed)] });
     //Created (and registered) right away so an admin can stop it
     const collector = poll.createMessageComponentCollector({
         componentType: ComponentType.Button,
@@ -146,7 +149,7 @@ export async function runVote(opts: {
         withdrew ? mine.delete(btn.user.id) : mine.add(btn.user.id);
 
         await btn
-            .update({ content: content + votedLine(), components: [voteRow(options, counts(), votesNeeded)] })
+            .update({ content: content + votedLine(), components: [voteRow(options, counts(), needed)] })
             .catch(() => undefined);
 
         //Private receipt so there's no doubt YOUR click registered
@@ -158,14 +161,14 @@ export async function runVote(opts: {
                 : `✔️ Vote recorded: **${choice}**.`;
         await btn.followUp({ content: receipt, flags: MessageFlags.Ephemeral }).catch(() => undefined);
 
-        if (voters[0].size >= votesNeeded) collector.stop(`decided:${options[0].id}`);
-        else if (voters[1].size >= votesNeeded) collector.stop(`decided:${options[1].id}`);
+        if (voters[0].size >= needed[0]) collector.stop(`decided:${options[0].id}`);
+        else if (voters[1].size >= needed[1]) collector.stop(`decided:${options[1].id}`);
     });
 
     //Event listener on 'end' when vote finishes (closed, decided, or expired)
     collector.on('end', async (_collected, reason) => {
         activeVotes.delete(key);
-        const finalRow = voteRow(options, counts(), votesNeeded, true);
+        const finalRow = voteRow(options, counts(), needed, true);
         try {
             if (reason.startsWith('closed:')) {
                 await poll.edit({ content: `⚙️ ${reason.slice('closed:'.length)}`, components: [finalRow] });

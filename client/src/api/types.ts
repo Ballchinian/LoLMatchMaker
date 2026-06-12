@@ -118,7 +118,7 @@ export interface BalanceResult {
 
 export type Actor = 'admin' | 'bot';
 export type CreatorActor = Actor | 'public';
-export type MatchStatus = 'pending' | 'confirmed' | 'reversed';
+export type MatchStatus = 'pending' | 'inProgress' | 'confirmed' | 'reversed';
 
 export interface RosterEntry {
     player: string;

@@ -2,11 +2,12 @@ import { Schema, model, type Model, type HydratedDocument, Types } from 'mongoos
 import type { Actor, CreatorActor } from '../middleware/auth';
 
 /*
-    'pending':   no MMR moved yet
-    'confirmed': winner set, MMR/RD applied
-    'reversed':  confirmed, then undone
+    'pending':    no MMR moved yet, not being played
+    'inProgress': bot set up the game channels, being played (back to pending on cancel)
+    'confirmed':  winner set, MMR/RD applied
+    'reversed':   confirmed, then undone
 */
-export type MatchStatus = 'pending' | 'confirmed' | 'reversed';
+export type MatchStatus = 'pending' | 'inProgress' | 'confirmed' | 'reversed';
 
 export interface RosterEntry {
   //Player ObjectId
@@ -74,7 +75,7 @@ const rosterEntrySchema = new Schema<RosterEntry>(
 
 const matchSchema = new Schema<MatchAttrs, MatchModel>(
   {
-    status: { type: String, enum: ['pending', 'confirmed', 'reversed'], required: true, default: 'pending', index: true },
+    status: { type: String, enum: ['pending', 'inProgress', 'confirmed', 'reversed'], required: true, default: 'pending', index: true },
     name: { type: String },
     teamA: { type: [rosterEntrySchema], required: true },
     teamB: { type: [rosterEntrySchema], required: true },
