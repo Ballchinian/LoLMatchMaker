@@ -272,10 +272,10 @@ const rolesSchema = z
   });
 
 /**
- * PATCH /api/players/:id/roles — set a player's versatility: role coverage
- * (1 → -125 … 5 → +50) and champion-pool depth (one-trick -200, two-trick -75,
- * diverse 0). The modifiers stack into the displayed/balancing MMR; raw MMR,
- * ranks and Glicko are untouched.
+ * PATCH /api/players/:id/roles — set a player's versatility. Champion-pool
+ * depth adjusts the displayed/balancing MMR (one-trick -200, two-trick -75,
+ * diverse 0); rolesPlayed is stored as info only. Raw MMR, ranks and Glicko
+ * are untouched.
  */
 playersRouter.patch(
   '/:id/roles',

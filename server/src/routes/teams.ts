@@ -42,11 +42,10 @@ teamsRouter.post(
       throw new ApiError(404, 'One or more selected players were not found.');
     }
 
-    // Balance on matchmaking value: raw MMR minus the versatility penalties
-    // (role coverage + champion-pool depth).
+    // Balance on matchmaking value: raw MMR minus the champion-pool penalty.
     const balancePlayers: BalancePlayer[] = players.map((p) => ({
       id: p._id.toString(),
-      mmr: effectiveMMR(p.mmr, p.rolesPlayed, p.champPool),
+      mmr: effectiveMMR(p.mmr, p.champPool),
     }));
 
     const result = balanceTeams(balancePlayers, {

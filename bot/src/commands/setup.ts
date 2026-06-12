@@ -18,7 +18,7 @@ function infoText(commandsChannelId: string): string {
         `## LoL Match Maker\n` +
         `**Website:** ${config.WEBSITE_URL}\n\n` +
         `**How to sign up**\n` +
-        `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\` (answer your roles + champion pool).\n` +
+        `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\` (answer the champion pool question).\n` +
         `2. That unlocks the server and gives you a rank role synced from the website.\n` +
         `3. Linked the wrong account? \`/unlink\`, then /link again.\n\n` +
         `**Bot commands** (only work in <#${commandsChannelId}>)\n` +
@@ -27,7 +27,7 @@ function infoText(commandsChannelId: string): string {
         `\`/match join\` : pull everyone into the shared Game Comms channel\n` +
         `\`/match confirm\` : record the winner and apply MMR. Leave \`winner\` empty and the bot auto detects it from Riot match history\n` +
         `\`/match cancel\` : remove the channels, the match stays pending\n` +
-        `\`/update\` : change your roles/champion pool answers\n\n` +
+        `\`/update\` : change your champion pool answer\n\n` +
         `Not an admin? Match commands open a lobby vote: a majority of the game's linked players decides.`
     );
 }
@@ -119,10 +119,10 @@ export const setup: Command = {
         await ensureLobbyChannel(guild);
 
         /*
-            Commands-only channel: everyone can see it and use slash commands, but
-            can't type messages, except inside the bot's vote threads (match chat).
-            The bot keeps send/manage/thread rights so its polls live here unburied,
-            it can scrub ineligible reactions, and it can open/lock match-chat threads.
+            Commands-only channel: everyone can see it and use slash commands.
+            Typing is ALLOWED (denying Send Messages makes some Discord clients
+            refuse to open the "/" picker at all) but the bot auto-deletes every
+            non-bot message, so the channel stays clean and polls stay unburied.
         */
         const overwrites = [
             {
@@ -130,10 +130,10 @@ export const setup: Command = {
                 allow: [
                     PermissionFlagsBits.ViewChannel,
                     PermissionFlagsBits.UseApplicationCommands,
+                    PermissionFlagsBits.SendMessages,
                     PermissionFlagsBits.SendMessagesInThreads,
                 ],
                 deny: [
-                    PermissionFlagsBits.SendMessages,
                     PermissionFlagsBits.CreatePublicThreads,
                     PermissionFlagsBits.CreatePrivateThreads,
                 ],
@@ -224,7 +224,7 @@ export const setup: Command = {
         `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +
             `Give **${config.ADMIN_ROLE_NAME}** to anyone who should run admin commands without "Manage Server".\n\n` +
             `**#${config.COMMANDS_CHANNEL_NAME}** is the commands channel: slash commands ONLY work there (signup via /link included), ` +
-            `normal messages are blocked/auto-deleted, and match votes are posted there so they can't get buried.\n\n` +
+            `normal messages are auto-deleted, and match votes are posted there so they can't get buried.\n\n` +
             `**One manual step to gate the server:** Server Settings → Roles → **@everyone** → turn **OFF** "View Channels".\n` +
             `Unlinked members will then only see **#${config.COMMANDS_CHANNEL_NAME}**. Running **/link** there grants the ` +
             `**${config.LINKED_ROLE_NAME}** role (which has View Channels) plus their rank role, unlocking the server.\n` +

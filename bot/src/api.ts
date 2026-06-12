@@ -79,10 +79,10 @@ export const apiLinkDiscord = (playerId: string, discordUserId: string | null) =
 
 export type ChampPool = 'one-trick' | 'two-trick' | 'diverse';
 
-/** Set a player's versatility (role coverage 1–5 and/or champion-pool depth). */
+/** Set a player's champion-pool depth (the only versatility MMR modifier). */
 export const apiUpdateRoles = (
     playerId: string,
-    input: { rolesPlayed?: number; champPool?: ChampPool },
+    input: { champPool: ChampPool },
 ) =>
     req<{ player: ApiPlayer }>(`/players/${playerId}/roles`, {
     method: 'PATCH',

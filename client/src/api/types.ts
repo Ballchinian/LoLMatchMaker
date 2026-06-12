@@ -62,11 +62,11 @@ export interface Player {
     losses: number;
     gamesPlayed: number;
     tags: string[];
-    /** How many of the 5 roles this player covers (1–5). */
+    /** How many of the 5 roles this player covers (1–5). Info only: no MMR effect. */
     rolesPlayed: number;
     /** Champion-pool depth: one-tricks are ban-able in tournaments. */
     champPool: ChampPool;
-    /** Versatility modifier (role coverage + champ pool): -325 … +50. */
+    /** Champ-pool modifier: -200 … 0 (roles played no longer adjusts MMR). */
     mmrModifier: number;
     /** Adjusted MMR (mmr + modifier): what users see and what balancing uses. */
     effectiveMmr: number;

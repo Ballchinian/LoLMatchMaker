@@ -39,8 +39,8 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 
 | Command | Who | What |
 | ------- | --- | ---- |
-| `/link player:<name> roles:<1-5> champs:<pool>` | anyone | link your Discord account (answering the two versatility questions) → unlocks the server + assigns your rank role |
-| `/update [roles] [champs]` | anyone | change your versatility answers later |
+| `/link player:<name> champs:<pool>` | anyone | link your Discord account (answering the champion pool question) → unlocks the server + assigns your rank role |
+| `/update champs:<pool>` | anyone | change your champion pool answer later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
 | `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (website + signup + command guide), and the Lobby voice channel |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |

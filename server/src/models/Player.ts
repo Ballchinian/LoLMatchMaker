@@ -57,7 +57,7 @@ export interface PlayerAttrs {
   gamesPlayed: number;
   /** Mutable, free-form organizational labels (e.g. "smurfs", "office", "jungle mains"). */
   tags: string[];
-  /** How many of the 5 roles this player can play at their elo (1–5). */
+  /** How many of the 5 roles this player can play (1–5). Info only: no MMR effect. */
   rolesPlayed: number;
   /** Champion-pool depth: a one-trick is ban-able in tournaments regardless of role coverage. */
   champPool: ChampPool;
@@ -89,7 +89,7 @@ export interface PublicPlayer {
   tags: string[];
   rolesPlayed: number;
   champPool: ChampPool;
-  /** Versatility modifier (role coverage + champ pool): -325 … +50. */
+  /** Champ-pool modifier: -200 … 0 (roles played no longer adjusts MMR). */
   mmrModifier: number;
   /** Adjusted MMR (mmr + modifier): shown to users and used for balancing. Ranks use raw mmr. */
   effectiveMmr: number;
@@ -169,8 +169,8 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     tags: { type: [String], default: [] },
 
     // Versatility (mutable; set at /link signup or via /update / the admin UI).
-    // Roles: 1 → -125 … 5 → +50. Champ pool: one-trick -200, two-trick -75,
-    // diverse 0. They stack onto the displayed/balancing MMR; raw mmr drives ranks.
+    // Champ pool adjusts displayed/balancing MMR (one-trick -200, two-trick -75,
+    // diverse 0); rolesPlayed is info only. Raw mmr drives ranks and Glicko.
     rolesPlayed: { type: Number, min: 1, max: MAX_ROLES, default: 3 },
     champPool: { type: String, enum: [...CHAMP_POOLS, 'limited'], default: 'diverse' },
 
@@ -211,8 +211,8 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     tags: this.tags ?? [],
     rolesPlayed: this.rolesPlayed ?? MAX_ROLES,
     champPool: (this.champPool as string) === 'limited' ? 'two-trick' : (this.champPool ?? 'diverse'),
-    mmrModifier: versatilityModifier(this.rolesPlayed, this.champPool),
-    effectiveMmr: effectiveMMR(this.mmr, this.rolesPlayed, this.champPool),
+    mmrModifier: versatilityModifier(this.champPool),
+    effectiveMmr: effectiveMMR(this.mmr, this.champPool),
     discordUserId: this.discordUserId,
     rank: {
       tier: rank.tier,

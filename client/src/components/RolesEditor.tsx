@@ -2,8 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage, updatePlayerRoles } from '../api/client';
 import type { ChampPool, Player } from '../api/types';
 
-const ROLE_MOD: Record<number, number> = { 1: -125, 2: -50, 3: 0, 4: 25, 5: 50 };
-
 const POOLS: { value: ChampPool; label: string; mod: number }[] = [
     { value: 'one-trick', label: 'One-trick', mod: -200 },
     { value: 'two-trick', label: 'Two-trick', mod: -75 },
@@ -12,12 +10,11 @@ const POOLS: { value: ChampPool; label: string; mod: number }[] = [
 
 const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
 
-/**
- * Admin-only: set a player's versatility. Two stacking modifiers on their
- * displayed/balancing MMR (raw MMR, ranks and Elo are untouched):
- *  - role coverage: 1 → -125, 2 → -50, 3 → 0, 4 → +25, 5 → +50
- *  - champion pool: one-trick -200, two-trick -75, diverse 0
- */
+/*
+    Admin-only: set a player's versatility. Champion pool adjusts the
+    displayed/balancing MMR (one-trick -200, two-trick -75, diverse 0);
+    roles played is stored as info only. Raw MMR, ranks and Glicko untouched.
+*/
 export function RolesEditor({ player }: { player: Player }) {
     const qc = useQueryClient();
 
@@ -36,7 +33,7 @@ export function RolesEditor({ player }: { player: Player }) {
                 <button
                 key={n}
                 type="button"
-                title={`${n} role${n > 1 ? 's' : ''} (${fmt(ROLE_MOD[n] ?? 0)})`}
+                title={`${n} role${n > 1 ? 's' : ''} (info only)`}
                 disabled={mut.isPending}
                 onClick={() => mut.mutate({ rolesPlayed: n })}
                 className={`px-2 py-0.5 transition ${
