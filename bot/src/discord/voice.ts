@@ -9,7 +9,7 @@ import {
 } from 'discord.js';
 import { config } from '../config';
 
-/** Find (or create) the inhouse category that holds match channels. */
+//Find (or create) the inhouse category that holds match channels.
 export async function ensureCategory(guild: Guild): Promise<CategoryChannel> {
     const existing = guild.channels.cache.find(
         (c) => c.type === ChannelType.GuildCategory && c.name === config.INHOUSE_CATEGORY,
@@ -97,13 +97,13 @@ export async function createMatchChannels(
         permissionOverwrites: lockOverwrites(guild, allMemberIds),
     });
     const teamA = await guild.channels.create({
-        name: `🔵 ${label} — Team A`,
+        name: `🏹 ${label} — Team A`,
         type: ChannelType.GuildVoice,
         parent: parent.id,
         permissionOverwrites: lockOverwrites(guild, teamAMemberIds),
     });
     const teamB = await guild.channels.create({
-        name: `🔴 ${label} — Team B`,
+        name: `🔪 ${label} — Team B`,
         type: ChannelType.GuildVoice,
         parent: parent.id,
         permissionOverwrites: lockOverwrites(guild, teamBMemberIds),
@@ -111,7 +111,7 @@ export async function createMatchChannels(
     return { categoryId: parent.id, gameCommsId: gameComms.id, teamAId: teamA.id, teamBId: teamB.id };
 }
 
-// Move members (who are currently in any voice channel) into `channelId`. Returns count moved.
+//Move members (who are currently in any voice channel) into `channelId`. Returns count moved.
 export async function moveMembers(
     guild: Guild,
     memberIds: string[],
@@ -120,13 +120,13 @@ export async function moveMembers(
     let moved = 0;
     for (const id of memberIds) {
         try {
-        const member = await guild.members.fetch(id);
-        if (member.voice.channelId) {
-            await member.voice.setChannel(channelId);
-            moved++;
-        }
+            const member = await guild.members.fetch(id);
+            if (member.voice.channelId) {
+                await member.voice.setChannel(channelId);
+                moved++;
+            }
         } catch {
-        // not in voice, or not a member — skip
+        //not in voice, or not a member — skip
         }
     }
     return moved;
@@ -142,25 +142,25 @@ export async function deleteChannels(guild: Guild, ids: string[]): Promise<Delet
     let deleted = 0;
     const errors: string[] = [];
     for (const id of ids) {
-        // Fetch fresh so we always act on a current, manageable channel object.
+        //Fetch fresh so we always act on a current, manageable channel object.
         const ch = (await guild.channels.fetch(id).catch(() => null)) ?? guild.channels.cache.get(id) ?? null;
         if (!ch) continue;
         try {
-        await ch.delete();
-        deleted++;
+            await ch.delete();
+            deleted++;
         } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        errors.push(`${ch.name}: ${reason}`);
-        console.error('[voice] failed to delete channel', ch.name, err);
+            const reason = err instanceof Error ? err.message : String(err);
+            errors.push(`${ch.name}: ${reason}`);
+            console.error('[voice] failed to delete channel', ch.name, err);
         }
     }
     return { deleted, errors };
 }
 
-/**
- * Locate a match's voice channels by their name tag (e.g. "#70f4"), so setup/end/split
- * work regardless of in-memory state (survives bot restarts).
- */
+/*
+    Locate a match's voice channels by their name tag (e.g. "#70f4"), so setup/end/split
+    work regardless of in-memory state (survives bot restarts).
+*/
 export interface FoundChannels {
     all: VoiceChannel[];
     gameComms?: VoiceChannel;
@@ -168,17 +168,17 @@ export interface FoundChannels {
     teamB?: VoiceChannel;
 }
 
-/** Extract the match label from a managed channel name (e.g. "🔵 Funky Lobby — Team A" → "Funky Lobby"). */
+//Extract the match label from a managed channel name (e.g. "Funky Lobby — Team A" → "Funky Lobby"). */
 function labelFromChannelName(name: string): string | null {
     const m = name.match(/^\S+ (.+) — (Game|Team A|Team B)$/u);
     return m ? m[1]! : null;
 }
 
-/**
- * Tear down channels whose match is no longer pending — e.g. it was cancelled,
- * deleted, or confirmed from the WEBPAGE, which the bot otherwise never hears
- * about. Members are returned to Lobby first. Only touches voice channels
- * inside the inhouse category that follow our naming scheme.
+/*
+    Tear down channels whose match is no longer pending — e.g. it was cancelled,
+    deleted, or confirmed from the WEBPAGE, which the bot otherwise never hears
+    about. Members are returned to Lobby first. Only touches voice channels
+    inside the inhouse category that follow our naming scheme.
  */
 export async function sweepOrphanedChannels(
     guild: Guild,

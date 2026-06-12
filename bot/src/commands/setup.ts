@@ -1,4 +1,11 @@
-import { ChannelType, MessageFlags, PermissionFlagsBits, SlashCommandBuilder, type TextChannel } from 'discord.js';
+import {
+    ChannelType,
+    MessageFlags,
+    PermissionFlagsBits,
+    SlashCommandBuilder,
+    type CategoryChannel,
+    type TextChannel,
+} from 'discord.js';
 import type { Command } from './types';
 import { isAdmin } from '../discord/guards';
 import { ensureAllRoles } from '../discord/roles';
@@ -67,6 +74,40 @@ export const setup: Command = {
             await interaction.editReply(
                 `❌ I'm missing these permissions: **${missing.join(', ')}**.\n` +
                 `Server Settings → Roles → my role → enable them, then run /setup again.`,
+            );
+            return;
+        }
+
+        /*
+            A channel/category with one of our names may already exist (made by
+            hand, or before the server was gated) with overwrites that hide it
+            from the bot. Editing those fails with a bare 50013, so name them.
+        */
+        const me = guild.members.me;
+        const canManage = (ch: TextChannel | CategoryChannel): boolean =>
+            me !== null &&
+            ch.permissionsFor(me).has([
+                PermissionFlagsBits.ViewChannel,
+                PermissionFlagsBits.ManageChannels,
+                PermissionFlagsBits.ManageRoles,
+            ]);
+
+        const blocked: string[] = [];
+        for (const name of [config.COMMANDS_CHANNEL_NAME, config.INFO_CHANNEL_NAME]) {
+            const ch = guild.channels.cache.find(
+                (c): c is TextChannel => c.type === ChannelType.GuildText && c.name === name,
+            );
+            if (ch && !canManage(ch)) blocked.push(`**#${name}**`);
+        }
+        const category = guild.channels.cache.find(
+            (c): c is CategoryChannel => c.type === ChannelType.GuildCategory && c.name === config.INHOUSE_CATEGORY,
+        );
+        if (category && !canManage(category)) blocked.push(`the **${config.INHOUSE_CATEGORY}** category`);
+        if (blocked.length) {
+            await interaction.editReply(
+                `❌ ${blocked.join(', ')} already exist(s) but I can't see or manage it/them.\n` +
+                `Either grant my role View Channel + Manage Channels + Manage Permissions in its settings, ` +
+                `or delete it/them and run /setup again (I'll recreate everything).`,
             );
             return;
         }
@@ -180,7 +221,7 @@ export const setup: Command = {
         else await info.send(text);
 
         await interaction.editReply(
-        `✅ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +
+        `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +
             `Give **${config.ADMIN_ROLE_NAME}** to anyone who should run admin commands without "Manage Server".\n\n` +
             `**#${config.COMMANDS_CHANNEL_NAME}** is the commands channel: slash commands ONLY work there (signup via /link included), ` +
             `normal messages are blocked/auto-deleted, and match votes are posted there so they can't get buried.\n\n` +

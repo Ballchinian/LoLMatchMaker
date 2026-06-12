@@ -70,7 +70,7 @@ async function runSetup(
     const movedA = await moveMembers(guild, aLinked, channels.teamAId);
     const movedB = await moveMembers(guild, bLinked, channels.teamBId);
     return (
-        `✅ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
+        `✔️ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
         '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to re-send them to their teams.' +
         (unlinked.length
             ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`

@@ -3,7 +3,7 @@ import type { Command } from './types';
 import { apiGetPlayers, apiUpdateRoles, type ChampPool } from '../api';
 import { champsOption, rolesOption } from './versatility';
 
-/** Self-service: update the signup answers (role coverage / one-tricking) for YOUR linked player. */
+//Self-service: update the signup answers (role coverage / one-tricking) for YOUR linked player.
 export const update: Command = {
     data: new SlashCommandBuilder()
         .setName('update')
@@ -24,7 +24,7 @@ export const update: Command = {
         const players = await apiGetPlayers();
         const mine = players.find((p) => p.discordUserId === interaction.user.id);
         if (!mine) {
-            await interaction.editReply('❌ You are not linked to a player yet — run /link first.');
+            await interaction.editReply('❌ You are not linked to a player yet, run /link first.');
             return;
         }
 
@@ -33,6 +33,6 @@ export const update: Command = {
             rolesPlayed !== undefined ? `roles: ${rolesPlayed}` : null,
             champPool !== undefined ? `champ pool: ${champPool}` : null,
         ].filter(Boolean);
-        await interaction.editReply(`✅ Updated **${player.displayName}** — ${parts.join(', ')}.`);
+        await interaction.editReply(`✔️ Updated **${player.displayName}** — ${parts.join(', ')}.`);
     },
 };
