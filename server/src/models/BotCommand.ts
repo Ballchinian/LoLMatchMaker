@@ -38,6 +38,9 @@ const botCommandSchema = new Schema<BotCommandAttrs, BotCommandModel>(
   { timestamps: true },
 );
 
+//Self-cleaning: queued commands are short-lived UI events, no value after a week.
+botCommandSchema.index({ createdAt: 1 }, { expireAfterSeconds: 7 * 24 * 60 * 60 });
+
 export const BotCommand: BotCommandModel =
   (globalThis as any).__BotCommandModel ?? model<BotCommandAttrs, BotCommandModel>('BotCommand', botCommandSchema);
 

@@ -15,7 +15,7 @@ import { MmrEditor } from '../components/MmrEditor';
 import { RolesEditor } from '../components/RolesEditor';
 import { TagPicker } from '../components/TagPicker';
 import { DiscordUnlink } from '../components/DiscordUnlink';
-import { PlayerReset, ServerReset } from '../components/ResetControls';
+import { DeletePlayer, PlayerReset, ServerReset } from '../components/ResetControls';
 import { TagFilterBar } from '../components/TagFilterBar';
 import { collectTags, matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
@@ -309,7 +309,12 @@ function Roster() {
               {privileged && <RolesEditor player={p} />}
               {privileged && <MmrEditor player={p} />}
               {privileged && <DiscordUnlink player={p} />}
-              {privileged && <PlayerReset player={p} />}
+              {privileged && (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <PlayerReset player={p} />
+                  <DeletePlayer player={p} />
+                </div>
+              )}
             </div>
           </div>
         ))}

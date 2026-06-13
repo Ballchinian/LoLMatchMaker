@@ -130,13 +130,15 @@ export async function unlinkPlayerDiscord(id: string): Promise<Player> {
     return data.player;
 }
 
-/** Admin: set a player's versatility — role coverage (1–5) and/or champion-pool depth. */
-export async function updatePlayerRoles(
-    id: string,
-    input: { rolesPlayed?: number; champPool?: ChampPool },
-): Promise<Player> {
-    const { data } = await api.patch<{ player: Player }>(`/players/${id}/roles`, input);
+/** Admin: set a player's champion-pool depth (the versatility MMR modifier). */
+export async function updatePlayerChampPool(id: string, champPool: ChampPool): Promise<Player> {
+    const { data } = await api.patch<{ player: Player }>(`/players/${id}/roles`, { champPool });
     return data.player;
+}
+
+/** Admin: permanently delete a player (website only; blocked if they're in an open match). */
+export async function deletePlayer(id: string): Promise<void> {
+    await api.delete(`/players/${id}`);
 }
 
 /** Admin override of a player's seed and/or current MMR. */

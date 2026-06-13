@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiErrorMessage, resetAllPlayers, resetPlayer } from '../api/client';
+import { apiErrorMessage, deletePlayer, resetAllPlayers, resetPlayer } from '../api/client';
 import type { Player, ResetView } from '../api/types';
 
 /*
@@ -54,6 +54,38 @@ export function PlayerReset({ player }: { player: Player }) {
             </button>
             {summary && <span className="text-emerald-400">{summary}</span>}
             {reset.isError && <span className="text-rose-400">{apiErrorMessage(reset.error)}</span>}
+        </div>
+    );
+}
+
+export function DeletePlayer({ player }: { player: Player }) {
+    const qc = useQueryClient();
+
+    const del = useMutation({
+        mutationFn: () => deletePlayer(player.id),
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['players'] }),
+    });
+
+    return (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+            <button
+                className="rounded border border-rose-800/60 px-2 py-0.5 text-rose-300 transition hover:border-rose-600 disabled:opacity-50"
+                disabled={del.isPending}
+                onClick={() => {
+                    if (
+                        window.confirm(
+                            `Permanently delete ${player.displayName}?\n\n` +
+                            `This removes them from the roster entirely (their Discord link too). ` +
+                            `Confirmed match history keeps its own name/MMR snapshots and is unaffected. This cannot be undone.`,
+                        )
+                    ) {
+                        del.mutate();
+                    }
+                }}
+            >
+                {del.isPending ? 'Deleting…' : '🗑️ Delete player'}
+            </button>
+            {del.isError && <span className="text-rose-400">{apiErrorMessage(del.error)}</span>}
         </div>
     );
 }

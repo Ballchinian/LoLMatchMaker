@@ -9,7 +9,7 @@ import { findRecentCustomResult } from '../services/riot';
 import { riotEnabled, writesProtected } from '../config/env';
 import { randomLobbyName } from '../services/lobbyName';
 import { ApiError, asyncHandler } from '../middleware/errors';
-import { guildFilter, identify, requireWriter, resolveCreator, type Actor } from '../middleware/auth';
+import { guildFilter, isGlobalActor, requireWriter, resolveCreator, type Actor } from '../middleware/auth';
 
 export const matchesRouter = Router();
 
@@ -418,7 +418,7 @@ matchesRouter.delete(
   '/:id',
   asyncHandler(async (req, res) => {
     const match = await loadScopedMatch(req, { withToken: true });
-    const isPrivileged = !writesProtected || identify(req) !== null;
+    const isPrivileged = !writesProtected || (req.auth ?? null) !== null;
 
     if (isPrivileged) {
       if (match.status !== 'pending' && match.status !== 'inProgress') {

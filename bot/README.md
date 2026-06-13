@@ -48,7 +48,7 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 | `/link player:<name> champs:<pool>` | anyone | link your Discord account (answering the champion pool question) → unlocks the server + assigns your rank role |
 | `/update champs:<pool>` | anyone | change your champion pool answer later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
-| `/setup` | admin | create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (website + signup + command guide), and the Lobby voice channel |
+| `/setup [password] [rotate_key]` | admin (password change + key rotation: **owner only**) | register the server with the backend (first run needs `password`), create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (website + key + signup + lifecycle + command guide), and the Lobby voice channel. `rotate_key:true` issues a fresh server key |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin (non-admins trigger a lobby-majority 👍/👎 vote) | create the channels and send players straight to their team channels |
 | `/match split match:<pending>` | admin | move players (back) into their team channels |

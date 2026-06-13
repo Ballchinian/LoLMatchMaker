@@ -9,7 +9,6 @@ A web application that works alongside discord to creates fair League of Legends
 - Adaptive Team balancing algorithm
 - MMR tracking
 - Match history
-- Role-based matchmaking
 - Admin controls
 
 
@@ -46,9 +45,16 @@ bot commands all carry the server's guild id and are never shared between server
 - `/setup password:<...>` registers the server and returns an unguessable **server key**
   (posted in the #info channel). Pasting it on the website scopes the site to that server.
 - The **admin password** (scrypt-hashed in MongoDB) is exchanged at login for a signed,
-  expiring token that unlocks admin actions for that server only.
+  expiring, **version-stamped** token that unlocks admin actions for that server only.
+  Rotating the password (owner-only) bumps the version and logs out old sessions.
+- The **server key** can be rotated (owner-only, `/setup rotate_key:true`) to cut off anyone
+  who still has the old one.
 - All data requests resolve their scope from the token / the bot's `X-Guild-Id` header /
   the public `X-Server-Key` header — an unknown or missing key sees nothing.
+- **Lifecycle:** the bot purges a server's data when it's kicked (`GuildDelete`), and a
+  reaper deletes servers with no activity for `REAP_INACTIVE_DAYS` (default 120) plus prunes
+  reversed matches older than `REVERSED_PRUNE_DAYS` (default 30). A `MAX_SERVERS` cap is
+  available. Dead servers therefore don't accumulate storage or polling cost.
 
 # API Endpoints
 
@@ -57,9 +63,12 @@ bot commands all carry the server's guild id and are never shared between server
 
 ## Authentication & servers
 - `GET /api/auth/me` 🔒 — Validate a token and return the actor role (+ server, if scoped)
-- `POST /api/servers/register` 🔒 — (bot) Register/update a Discord server; returns its key
-- `POST /api/servers/login` — Server key + admin password → per-server admin token
+- `POST /api/servers/register` 🔒 — (bot/global only) Register/update a Discord server; returns
+  its key. Password change + key rotation are owner-only (enforced via the invoker).
+- `POST /api/servers/login` — Server key + admin password → per-server admin token (rate
+  limited + per-key lockout after repeated failures)
 - `GET /api/servers/lookup?key=` — Resolve a server key to its server name
+- `DELETE /api/servers/:guildId` 🔒 — (bot/global only) Purge a server and all its data
 
 ## Players
 - `GET /api/players` — List players (strongest first)
@@ -67,8 +76,10 @@ bot commands all carry the server's guild id and are never shared between server
 - `POST /api/players` 🔒 — Inject a player (`riot` or `manual`)
 - `PATCH /api/players/:id/tags` 🔒 — Replace a player's tags
 - `PATCH /api/players/:id/mmr` 🔒 — Admin override of seed MMR, current MMR and/or RD
+- `PATCH /api/players/:id/roles` 🔒 — Set champion-pool depth (the versatility MMR modifier)
 - `POST /api/players/:id/reset` 🔒 — Reset one player (riot refresh, re-seed, zero record)
 - `POST /api/players/reset-all` 🔒 — Server reset: the same for every player
+- `DELETE /api/players/:id` 🔒 — Permanently delete a player (blocked while in an open match)
 
 ## Teams
 - `POST /api/teams/balance` — Fairest split plus alternative balanced teams
@@ -87,5 +98,6 @@ bot commands all carry the server's guild id and are never shared between server
 ## Discord command queue (website Discord tab)
 - `POST /api/bot-commands` 🔒 — Queue a match action for the bot to run in Discord
 - `GET /api/bot-commands` 🔒 — Recent commands + the bot's outcomes
-- `POST /api/bot-commands/claim` 🔒 — (bot) Claim the oldest queued command
+- `POST /api/bot-commands/claim-next` 🔒 — (bot/global only) Claim the next queued command across
+  all guilds in one request (so polling cost is constant, not per-server)
 - `POST /api/bot-commands/:id/complete` 🔒 — (bot) Report the outcome

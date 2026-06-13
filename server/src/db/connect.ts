@@ -1,21 +1,30 @@
 import mongoose from 'mongoose';
 import { env } from '../config/env';
 import { Player } from '../models/Player';
+import { Server } from '../models/Server';
+import { BotCommand } from '../models/BotCommand';
 
 let connected = false;
 
 /*
-    One-time index migration for multi-tenancy: the old schema had a GLOBAL
-    unique index on discordUserId; per-server data needs uniqueness per guild.
-    syncIndexes drops indexes the schema no longer declares and builds the
-    new compound one. Best effort: a failure here must not stop the boot.
+    Sync indexes for collections that changed shape: the Player discordUserId
+    index went from GLOBAL-unique to per-guild compound, Server gained
+    lastActiveAt, and BotCommand gained a TTL index. syncIndexes drops indexes
+    the schema no longer declares and builds new ones. Best effort: a failure
+    here must not stop the boot.
 */
 async function migrateIndexes(): Promise<void> {
-  try {
-    const dropped = await Player.syncIndexes();
-    if (dropped.length > 0) console.log(`[db] dropped stale player indexes: ${dropped.join(', ')}`);
-  } catch (err) {
-    console.warn('[db] index sync skipped:', (err as Error).message);
+  for (const [name, model] of [
+    ['player', Player],
+    ['server', Server],
+    ['botCommand', BotCommand],
+  ] as const) {
+    try {
+      const dropped = await model.syncIndexes();
+      if (dropped.length > 0) console.log(`[db] synced ${name} indexes (dropped: ${dropped.join(', ')})`);
+    } catch (err) {
+      console.warn(`[db] ${name} index sync skipped:`, (err as Error).message);
+    }
   }
 }
 

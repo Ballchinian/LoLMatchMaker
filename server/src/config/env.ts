@@ -22,6 +22,21 @@ const envSchema = z.object({
   // if all are blank a random per-boot secret is used (logins die on restart).
   AUTH_SECRET: z.string().optional().default(''),
 
+  // Set when running behind a reverse proxy (Railway/Netlify) so the rate
+  // limiter keys on the real client IP, not the proxy's. 0 = no proxy (dev).
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(1),
+
+  // Hard cap on registered Discord servers (0 = unlimited).
+  MAX_SERVERS: z.coerce.number().int().min(0).default(0),
+
+  // Reaper: a server with no activity (login/match write) for this many days is
+  // deleted along with its data. 0 disables the reaper. Match-history pruning of
+  // reversed games older than REVERSED_PRUNE_DAYS runs on the same schedule.
+  REAP_INACTIVE_DAYS: z.coerce.number().int().min(0).default(120),
+  REVERSED_PRUNE_DAYS: z.coerce.number().int().min(0).default(30),
+
+  NODE_ENV: z.string().optional().default('development'),
+
   // Riot integration is optional — without a key the app still works with manual entry.
   RIOT_API_KEY: z.string().optional().default(''),
   RIOT_REGION: z.enum(['americas', 'europe', 'asia', 'sea']).default('europe'),
@@ -44,3 +59,6 @@ export const riotEnabled = env.RIOT_API_KEY.trim().length > 0;
 /** True when at least one auth token is set, meaning privileged routes are enforced. */
 export const writesProtected =
   env.ADMIN_TOKEN.trim().length > 0 || env.BOT_TOKEN.trim().length > 0;
+
+/** True in a production deployment (NODE_ENV=production), used to refuse unsafe configs. */
+export const isProduction = env.NODE_ENV.toLowerCase() === 'production';

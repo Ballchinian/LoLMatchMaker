@@ -55,14 +55,23 @@ function sign(payload: string): string {
     return b64url(createHmac('sha256', secret).update(payload).digest());
 }
 
-//Format: gs1.<base64url {g, exp}>.<hmac>
-export function signServerToken(guildId: string): string {
-    const payload = b64url(Buffer.from(JSON.stringify({ g: guildId, exp: Date.now() + TOKEN_TTL_MS })));
+export interface ServerTokenClaims {
+    guildId: string;
+    //Token version at issue time; compared against the server's current version
+    version: number;
+}
+
+//Format: gs1.<base64url {g, v, exp}>.<hmac>
+export function signServerToken(guildId: string, version: number): string {
+    const payload = b64url(
+        Buffer.from(JSON.stringify({ g: guildId, v: version, exp: Date.now() + TOKEN_TTL_MS })),
+    );
     return `${TOKEN_PREFIX}.${payload}.${sign(payload)}`;
 }
 
-//Returns the guildId baked into a valid, unexpired token, else null
-export function verifyServerToken(token: string): string | null {
+//Returns the claims baked into a valid, unexpired token, else null. The version
+//is NOT trusted here — the caller compares it against the server's current one.
+export function verifyServerToken(token: string): ServerTokenClaims | null {
     const parts = token.split('.');
     if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) return null;
     const expected = sign(parts[1]!);
@@ -72,10 +81,11 @@ export function verifyServerToken(token: string): string | null {
     try {
         const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString()) as {
             g?: string;
+            v?: number;
             exp?: number;
         };
         if (!payload.g || !payload.exp || payload.exp < Date.now()) return null;
-        return payload.g;
+        return { guildId: payload.g, version: payload.v ?? 0 };
     } catch {
         return null;
     }

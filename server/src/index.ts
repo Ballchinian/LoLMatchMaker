@@ -2,11 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { env, riotEnabled, writesProtected } from './config/env';
+import { env, isProduction, riotEnabled, writesProtected } from './config/env';
 import { connectDB, isDbConnected } from './db/connect';
 import { notFound, errorHandler } from './middleware/errors';
 import { requireDb } from './middleware/requireDb';
 import { resolveScope } from './middleware/auth';
+import { startReaper } from './services/reaper';
 import authRouter from './routes/auth';
 import playersRouter from './routes/players';
 import teamsRouter from './routes/teams';
@@ -15,6 +16,14 @@ import serversRouter from './routes/servers';
 import botCommandsRouter from './routes/botCommands';
 
 const app = express();
+
+/*
+    Behind Railway/Netlify the client IP is in X-Forwarded-For, not the socket.
+    Tell Express to trust the proxy so the rate limiter (and lockouts) key on
+    the real client, not the proxy's single IP (which would let one attacker
+    exhaust everyone's shared budget).
+*/
+app.set('trust proxy', env.TRUST_PROXY);
 
 app.use(helmet());
 app.use(cors({ origin: env.CLIENT_ORIGIN, credentials: true }));
@@ -52,8 +61,20 @@ app.use(notFound);
 app.use(errorHandler);
 
 async function start(): Promise<void> {
+  /*
+      Refuse to run wide open in production: with no ADMIN_TOKEN/BOT_TOKEN every
+      write is public, which is fine for local dev but a disaster once deployed.
+  */
+  if (isProduction && !writesProtected) {
+    console.error(
+      '[boot] FATAL: NODE_ENV=production but no ADMIN_TOKEN/BOT_TOKEN set — refusing to start in open mode.',
+    );
+    process.exit(1);
+  }
+
   try {
     await connectDB();
+    startReaper();
   } catch (err) {
     console.error('[boot] could not connect to MongoDB:', (err as Error).message);
     console.error('[boot] starting anyway — set MONGODB_URI in server/.env and restart.');

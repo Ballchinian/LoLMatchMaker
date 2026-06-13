@@ -5,10 +5,11 @@ import { registerCommandsForGuild, registerCommandsForGuilds } from './discord/r
 import { sweepOrphanedChannels } from './discord/voice';
 import { closeMatchVotes } from './discord/votes';
 import {
-    apiClaimBotCommand,
+    apiClaimNextBotCommand,
     apiCompleteBotCommand,
     apiGetMatches,
     apiGetPlayers,
+    apiPurgeServer,
     apiStopMatch,
     type ApiMatch,
 } from './api';
@@ -44,11 +45,18 @@ function labelOf(m: ApiMatch): string {
     return m.name ?? `#${m._id.slice(-4)}`;
 }
 
-/** How often to reconcile channels/threads with the backend's match states. */
+/*
+    How often the bot reconciles EVERY guild with the backend: 2h match expiry,
+    new-proposal @admin pings, and tearing down channels/threads for matches
+    confirmed/cancelled/deleted from the website. Uniform (no warm/cold tiers):
+    the expensive per-guild command poll is already a single global request (see
+    QUEUE_POLL_INTERVAL_MS), and the reaper deletes dead servers, so sweeping
+    everyone each minute is cheap and keeps latency predictable.
+*/
 const SWEEP_INTERVAL_MS = 60_000;
 /** An in-progress game should last about 2 hours; after that it auto-expires. */
 const MATCH_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-/** How often to look for website (Discord tab) commands to execute. */
+/** How often to claim the next website (Discord tab) command — ONE global request, ~5s latency. */
 const QUEUE_POLL_INTERVAL_MS = 5_000;
 
 /*
@@ -181,21 +189,27 @@ async function sweepAllGuilds(): Promise<void> {
 }
 
 /*
-    Website Discord tab: admins queue match actions on the backend; the bot
-    claims and executes them here, then reports the outcome back AND into the
-    commands channel so the lobby sees what happened.
+    Website Discord tab: admins queue match actions on the backend. The bot
+    claims the next one across ALL its guilds in a single request (so polling is
+    cheap no matter how many servers it's in) and executes it. The outcome goes
+    back to the website's command log only — we deliberately DON'T post it in the
+    Discord channel (that was noise the lobby didn't ask for).
 */
 let queueBusy = false;
 async function pollCommandQueue(): Promise<void> {
     if (queueBusy) return;
     queueBusy = true;
     try {
-        for (const guild of client.guilds.cache.values()) {
-            const cmd = await apiClaimBotCommand(guild.id).catch(() => null);
-            if (!cmd) continue;
-            let ok = false;
-            let result: string;
-            try {
+        const cmd = await apiClaimNextBotCommand().catch(() => null);
+        if (!cmd || !cmd.guildId) return;
+        const guild = client.guilds.cache.get(cmd.guildId);
+
+        let ok = false;
+        let result: string;
+        try {
+            if (!guild) {
+                result = '❌ The bot is no longer in that server.';
+            } else {
                 const matches = await apiGetMatches(guild.id);
                 const match = matches.find((m) => m._id === cmd.match);
                 if (!match) {
@@ -208,12 +222,11 @@ async function pollCommandQueue(): Promise<void> {
                     result = await performAction(guild, cmd.action, match, players, cmd.winner);
                     ok = !result.startsWith('❌');
                 }
-            } catch (err) {
-                result = `❌ ${(err as Error).message}`;
             }
-            await apiCompleteBotCommand(guild.id, cmd._id, ok, result).catch(() => undefined);
-            await announce(guild, `🌐 Website admin ran \`${cmd.action}\` on **${cmd.matchLabel}**:\n${result}`);
+        } catch (err) {
+            result = `❌ ${(err as Error).message}`;
         }
+        await apiCompleteBotCommand(cmd.guildId, cmd._id, ok, result).catch(() => undefined);
     } finally {
         queueBusy = false;
     }
@@ -243,6 +256,17 @@ client.on(Events.GuildCreate, async (guild) => {
         console.log(`[bot] joined ${guild.name}, commands registered — an admin should run /setup password:<...>`);
     } catch (err) {
         console.error(`[bot] command registration failed for new guild ${guild.name}:`, err);
+    }
+});
+
+//Kicked / guild deleted: purge that server's data so dead servers don't linger
+client.on(Events.GuildDelete, async (guild) => {
+    announcedByGuild.delete(guild.id);
+    try {
+        await apiPurgeServer(guild.id);
+        console.log(`[bot] left ${guild.name ?? guild.id}, purged its data`);
+    } catch (err) {
+        console.error(`[bot] purge failed for ${guild.id}:`, (err as Error).message);
     }
 });
 

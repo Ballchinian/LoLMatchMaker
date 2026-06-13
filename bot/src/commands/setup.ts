@@ -57,10 +57,16 @@ export const setup: Command = {
         .addStringOption((o) =>
         o
             .setName('password')
-            .setDescription('Website admin password for this server (required first time; re-run with one to change it)')
+            .setDescription('Website admin password (required first time; changing it later is owner-only)')
             .setRequired(false)
             .setMinLength(4)
             .setMaxLength(128),
+        )
+        .addBooleanOption((o) =>
+        o
+            .setName('rotate_key')
+            .setDescription('Generate a fresh server key, invalidating the old one (owner-only)')
+            .setRequired(false),
         ),
 
     async execute(interaction) {
@@ -78,19 +84,37 @@ export const setup: Command = {
         /*
             Register this guild with the backend FIRST: it partitions all data
             per server and hands back the website server key. First run requires
-            a password; later runs may pass one to rotate it.
+            a password; later runs may change it or rotate the key, but BOTH of
+            those are takeover vectors, so they're restricted to the guild owner.
         */
         const password = interaction.options.getString('password') ?? undefined;
+        const rotateKey = interaction.options.getBoolean('rotate_key') ?? false;
+
+        /*
+            The backend enforces that, on an ALREADY-registered server, only the
+            guild owner may change the password or rotate the key (it compares
+            the invoker we pass against the current owner). First-time setup is
+            open to any admin. Passing invokerId + ownerId keeps that authoritative.
+        */
         let serverKey: string;
         let serverCreated: boolean;
+        let rotatedKey = false;
         try {
-            const reg = await apiRegisterServer(guild.id, guild.name, password);
+            const reg = await apiRegisterServer(guild.id, {
+                guildName: guild.name,
+                ownerId: guild.ownerId,
+                invokerId: interaction.user.id,
+                password,
+                rotateKey,
+            });
             serverKey = reg.serverKey;
             serverCreated = reg.created;
+            rotatedKey = reg.rotatedKey ?? false;
         } catch (err) {
             await interaction.editReply(
                 `❌ Couldn't register this server with the backend: ${(err as Error).message}\n` +
-                `First time here? Run \`/setup password:<website admin password>\` — it becomes this server's admin login on the website.`,
+                `First time here? Run \`/setup password:<website admin password>\` — it becomes this server's admin login on the website. ` +
+                `Changing the password or rotating the key later is owner-only.`,
             );
             return;
         }
@@ -283,9 +307,12 @@ export const setup: Command = {
         const websiteNote = serverCreated
             ? `🌐 **Website access for this server**: the server key is \`${serverKey}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
                 `Members paste it on the website to see this server's data; admins unlock with the password you just set.\n\n`
-            : password
-                ? `🌐 Website admin password **updated**. Server key (unchanged): \`${serverKey}\`.\n\n`
-                : `🌐 Server already registered — key: \`${serverKey}\`. (Re-run \`/setup password:<new>\` to change the website admin password.)\n\n`;
+            : rotatedKey
+                ? `🌐 Server key **rotated** to \`${serverKey}\` — the old key no longer works, re-share this one. ` +
+                    (password ? 'Website admin password also updated (old logins signed out).\n\n' : '\n\n')
+                : password
+                    ? `🌐 Website admin password **updated** — existing website logins are signed out. Server key (unchanged): \`${serverKey}\`.\n\n`
+                    : `🌐 Server already registered — key: \`${serverKey}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
 
         await interaction.editReply(
         `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + match lifecycle + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +

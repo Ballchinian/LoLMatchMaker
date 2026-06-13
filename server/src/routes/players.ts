@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express';
 import { z } from 'zod';
 import { Player, type PlayerDoc } from '../models/Player';
+import { Match } from '../models/Match';
 import { lookupByRiotId, type RiotProfile } from '../services/riot';
 import { computeSeedMMR } from '../services/mmr';
 import { seedRD, RD_FLOOR, RD_CEILING } from '../services/glicko';
@@ -276,20 +277,15 @@ playersRouter.patch(
   }),
 );
 
-const rolesSchema = z
-  .object({
-    rolesPlayed: z.number().int().min(1).max(5).optional(),
-    champPool: z.enum(['one-trick', 'two-trick', 'diverse']).optional(),
-  })
-  .refine((d) => d.rolesPlayed !== undefined || d.champPool !== undefined, {
-    message: 'Provide rolesPlayed and/or champPool.',
-  });
+const rolesSchema = z.object({
+  champPool: z.enum(['one-trick', 'two-trick', 'diverse']),
+});
 
 /**
- * PATCH /api/players/:id/roles — set a player's versatility. Champion-pool
- * depth adjusts the displayed/balancing MMR (one-trick -200, two-trick -75,
- * diverse 0); rolesPlayed is stored as info only. Raw MMR, ranks and Glicko
- * are untouched.
+ * PATCH /api/players/:id/roles — set a player's champion-pool depth, which
+ * adjusts the displayed/balancing MMR (one-trick -200, two-trick -75,
+ * diverse 0). Raw MMR, ranks and Glicko are untouched. (Route name kept for
+ * the bot's existing /link call.)
  */
 playersRouter.patch(
   '/:id/roles',
@@ -297,8 +293,7 @@ playersRouter.patch(
   asyncHandler(async (req, res) => {
     const body = rolesSchema.parse(req.body);
     const player = await loadScopedPlayer(req);
-    if (body.rolesPlayed !== undefined) player.rolesPlayed = body.rolesPlayed;
-    if (body.champPool !== undefined) player.champPool = body.champPool;
+    player.champPool = body.champPool;
     await player.save();
     res.json({ player: player.toPublic() });
   }),
@@ -455,6 +450,37 @@ playersRouter.post(
     const { before, after, refreshedFromRiot } = await performReset(player);
     const fresh = await Player.findById(player._id).exec();
     res.json({ player: fresh!.toPublic(), before, after, refreshedFromRiot });
+  }),
+);
+
+/**
+ * DELETE /api/players/:id — permanently remove a player (admin, website only).
+ * Blocked while they're in an OPEN match (resolve those first); confirmed
+ * history keeps its own displayName/MMR snapshots, so it's unaffected.
+ */
+playersRouter.delete(
+  '/:id',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    const player = await loadScopedPlayer(req);
+
+    const openMatch = await Match.findOne({
+      guildId: player.guildId ?? null,
+      status: { $in: ['pending', 'inProgress'] },
+      $or: [{ 'teamA.player': player._id }, { 'teamB.player': player._id }],
+    })
+      .select('name')
+      .lean()
+      .exec();
+    if (openMatch) {
+      throw new ApiError(
+        409,
+        `${player.displayName} is in an open match (${openMatch.name ?? 'unnamed'}). Delete or confirm that match first.`,
+      );
+    }
+
+    await player.deleteOne();
+    res.json({ ok: true });
   }),
 );
 

@@ -20,7 +20,8 @@ async function req<T>(
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${config.BOT_TOKEN}`,
-            'X-Guild-Id': guildId,
+            //Omitted for global calls (e.g. claim-next across all guilds)
+            ...(guildId ? { 'X-Guild-Id': guildId } : {}),
             ...(rest.headers ?? {}),
         },
     });
@@ -123,11 +124,18 @@ export const apiUpdateRoles = (
 /* ----------------------- multi-tenancy / setup ------------------------- */
 
 /** /setup registers this guild as a tenant; returns the website server key. */
-export const apiRegisterServer = (guildId: string, guildName: string, password?: string) =>
-    req<{ serverKey: string; created: boolean }>(guildId, '/servers/register', {
+export const apiRegisterServer = (
+    guildId: string,
+    input: { guildName: string; ownerId: string; invokerId: string; password?: string; rotateKey?: boolean },
+) =>
+    req<{ serverKey: string; created: boolean; rotatedKey?: boolean }>(guildId, '/servers/register', {
     method: 'POST',
-    body: JSON.stringify({ guildId, guildName, password }),
+    body: JSON.stringify({ guildId, ...input }),
   });
+
+/** Purge this guild and all its data (called when the bot is kicked). */
+export const apiPurgeServer = (guildId: string) =>
+    req<{ ok: boolean }>(guildId, `/servers/${guildId}`, { method: 'DELETE' });
 
 /* ------------------------------- resets -------------------------------- */
 
@@ -179,11 +187,16 @@ export interface ApiBotCommand {
     createdAt: string;
 }
 
-/** Claim the oldest queued website command for this guild (null when idle). */
-export const apiClaimBotCommand = (guildId: string) =>
-    req<{ command: ApiBotCommand | null }>(guildId, '/bot-commands/claim', { method: 'POST', timeoutMs: 8_000 }).then(
-        (r) => r.command,
-    );
+/**
+ * Claim the oldest queued website command across ALL of the bot's guilds in one
+ * request (constant polling cost regardless of how many servers the bot is in).
+ * The returned command carries its own guildId. No X-Guild-Id needed.
+ */
+export const apiClaimNextBotCommand = () =>
+    req<{ command: ApiBotCommand | null }>('', '/bot-commands/claim-next', {
+        method: 'POST',
+        timeoutMs: 8_000,
+    }).then((r) => r.command);
 
 export const apiCompleteBotCommand = (guildId: string, id: string, ok: boolean, result: string) =>
     req<{ command: ApiBotCommand }>(guildId, `/bot-commands/${id}/complete`, {

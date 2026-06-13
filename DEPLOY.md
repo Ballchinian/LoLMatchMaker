@@ -49,6 +49,11 @@ The config files are already here:
    | `RIOT_REGION` | `europe` \| `americas` \| `asia` \| `sea` |
    | `RIOT_PLATFORM` | `euw1` \| `na1` \| `kr` \| … |
    | `CLIENT_ORIGIN` | your Netlify URL (fill in **after** step 2) |
+   | `NODE_ENV` | set to `production` — the server **refuses to boot** in open mode (no tokens) in prod |
+   | `TRUST_PROXY` | `1` (default) — Railway sits behind a proxy, so the rate limiter keys on the real client IP |
+   | `MAX_SERVERS` | *(optional)* hard cap on registered Discord servers (`0` = unlimited) |
+   | `REAP_INACTIVE_DAYS` | *(optional, default 120)* delete servers idle this long, with their data (`0` = off) |
+   | `REVERSED_PRUNE_DAYS` | *(optional, default 30)* prune reversed matches older than this (`0` = off) |
 
    > Do **not** set `PORT` — Railway injects it and the server reads it automatically.
 4. **Settings → Networking → Generate Domain.** Copy the URL, e.g.
@@ -92,6 +97,7 @@ The config files are already here:
   with the backend and posts the **server key** in the #info channel. /setup is idempotent:
   re-running it reuses existing roles/channels and just refreshes permissions + the info post.
   There is no migration from pre-multi-tenant data — every server starts with a fresh roster.
+  Changing the password later, or rotating the key with `/setup rotate_key:true`, is **owner-only**.
 - Open your Netlify site. Top-right **Connect server** → paste the server key (to browse) and
   the admin password (to unlock admin controls, including the Discord tab). The raw
   `ADMIN_TOKEN` still works in the password box as a global site-owner unlock.

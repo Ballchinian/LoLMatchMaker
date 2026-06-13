@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { identify, requireWriter } from '../middleware/auth';
+import { requireWriter } from '../middleware/auth';
 import { writesProtected } from '../config/env';
 import { Server } from '../models/Server';
 import { asyncHandler } from '../middleware/errors';
@@ -15,7 +15,8 @@ authRouter.get(
   '/me',
   requireWriter,
   asyncHandler(async (req, res) => {
-    const id = identify(req);
+    //requireWriter already authenticated and cached the identity.
+    const id = req.auth ?? null;
     let guildName: string | undefined;
     if (id?.guildId) {
       const server = await Server.findOne({ guildId: id.guildId }).lean().exec();

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { BotCommand } from '../models/BotCommand';
 import { Match } from '../models/Match';
 import { ApiError, asyncHandler } from '../middleware/errors';
-import { guildFilter, requireWriter } from '../middleware/auth';
+import { guildFilter, isGlobalActor, requireWriter } from '../middleware/auth';
 
 /*
     Queue between the website's Discord tab and the bot: admins enqueue match
@@ -62,8 +62,30 @@ botCommandsRouter.get(
 );
 
 /**
- * POST /api/bot-commands/claim — the bot atomically claims the oldest queued
- * command for its guild (X-Guild-Id). Returns { command: null } when idle.
+ * POST /api/bot-commands/claim-next — the bot atomically claims the oldest
+ * queued command across ALL its guilds in ONE request (so polling cost is
+ * constant, not per-guild). Bot/global-admin only — a per-server token must
+ * not see another server's commands. Returns { command: null } when idle.
+ */
+botCommandsRouter.post(
+  '/claim-next',
+  requireWriter,
+  asyncHandler(async (req, res) => {
+    if (!isGlobalActor(req)) throw new ApiError(403, 'Only the bot may claim commands.');
+    const command = await BotCommand.findOneAndUpdate(
+      { status: 'queued' },
+      { $set: { status: 'running' } },
+      { sort: { createdAt: 1 }, new: true },
+    )
+      .lean()
+      .exec();
+    res.json({ command: command ?? null });
+  }),
+);
+
+/**
+ * POST /api/bot-commands/claim — claim the oldest queued command for ONE guild
+ * (X-Guild-Id). Kept for completeness; the bot uses claim-next instead.
  */
 botCommandsRouter.post(
   '/claim',
