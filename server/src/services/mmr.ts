@@ -1,60 +1,60 @@
 import { rankToMMR, type RankInput } from './rank';
 
-/**
- * MMR seeding: turn a freshly-injected player's Riot data into a single internal
- * MMR number. This runs ONCE at injection; the value is frozen as `seedMMR` and
- * also used as the starting `mmr`, which then evolves via Glicko as customs are played.
- */
+/*
+    MMR seeding: turn a freshly-injected player's Riot data into a single internal
+    MMR number. This runs ONCE at injection; the value is frozen as `seedMMR` and
+    also used as the starting `mmr`, which then evolves via Glicko as customs are played.
+*/
 
-/** Default starting MMR for an unranked / Riot-less player (≈ Silver II). */
+//Default starting MMR for an unranked / Riot-less player (≈ Silver II).
 export const DEFAULT_SEED_MMR = 1000;
 
 export interface RecentForm {
-  games: number; // number of recent games sampled
-  winRate: number; // 0..1
-  avgKDA: number; // (kills + assists) / max(deaths, 1)
+    games: number; // number of recent games sampled
+    winRate: number; // 0..1
+    avgKDA: number; // (kills + assists) / max(deaths, 1)
 }
 
 export interface SeedInput {
-  /** Ranked snapshot from Riot, if available. */
-  riotRank?: RankInput | null;
-  /** Current-season ranked wins/losses backing the rank (drives the win-rate seed adjustment). */
-  seasonWins?: number | null;
-  seasonLosses?: number | null;
-  /** Explicit MMR override (manual entry of a raw number). Wins over everything. */
-  manualMMR?: number | null;
+    //Ranked snapshot from Riot, if available. 
+    riotRank?: RankInput | null;
+    // Current-season ranked wins/losses backing the rank (drives the win-rate seed adjustment).
+    seasonWins?: number | null;
+    seasonLosses?: number | null;
+    /// Explicit MMR override (manual entry of a raw number). Wins over everything.
+    manualMMR?: number | null;
 }
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
-/**
- * Seed adjustment from current-season ranked WIN RATE (KDA is deliberately
- * ignored — win rate is the cleaner signal at our volumes). Win rate above/below
- * 50% pushes the rank-based seed up/down, scaled by how many games back it up:
- *
- *   - magnitude = (winRate - 0.5) * 2000  → +200 at 60%, +400 at 70%, etc.
- *   - confidence ramps with games, ~0.25 at 10 games and full by 30 (slightly
- *     super-linear, so a handful of games barely moves the seed). e.g.
- *       30 games @ 40% → -200,  60% → +200,  70% → +400 (one tier)
- *       10 games @ 60% → ~+50,  70% → ~+100
- *
- * Capped at ±400 (a full tier) either way.
- */
-export function seasonWinRateAdjustment(
-  wins: number | null | undefined,
-  losses: number | null | undefined,
-): number {
-  const w = Math.max(0, wins ?? 0);
-  const l = Math.max(0, losses ?? 0);
-  const games = w + l;
-  if (games <= 0) return 0;
+/*
+    Seed adjustment from current-season ranked WIN RATE (KDA is deliberately
+    ignored — win rate is the cleaner signal at our volumes). Win rate above/below
+    50% pushes the rank-based seed up/down, scaled by how many games back it up:
 
-  const winRate = w / games;
-  const magnitude = (winRate - 0.5) * 2000;
-  const confidence = Math.min(1, (games / 30) ** 1.3);
-  return clamp(Math.round(magnitude * confidence), -400, 400);
+    - magnitude = (winRate - 0.5) * 2000  → +200 at 60%, +400 at 70%, etc.
+    - confidence ramps with games, ~0.25 at 10 games and full by 30 (slightly
+    super-linear, so a handful of games barely moves the seed). e.g.
+    30 games @ 40% → -200,  60% → +200,  70% → +400 (one tier)
+    10 games @ 60% → ~+50,  70% → ~+100
+
+    Capped at ±400 (a full tier) either way.
+*/
+export function seasonWinRateAdjustment(
+    wins: number | null | undefined,
+    losses: number | null | undefined,
+): number {
+    const w = Math.max(0, wins ?? 0);
+    const l = Math.max(0, losses ?? 0);
+    const games = w + l;
+    if (games <= 0) return 0;
+
+    const winRate = w / games;
+    const magnitude = (winRate - 0.5) * 2000;
+    const confidence = Math.min(1, (games / 30) ** 1.3);
+    return clamp(Math.round(magnitude * confidence), -400, 400);
 }
 
 /* ------------------------- champion versatility ------------------------- */
@@ -72,15 +72,38 @@ export const CHAMP_POOLS = ['one-trick', 'two-trick', 'diverse'] as const;
 export type ChampPool = (typeof CHAMP_POOLS)[number];
 
 export const CHAMP_POOL_MODIFIER: Record<ChampPool, number> = {
-  'one-trick': -200, //one champion: fully ban-able
-  'two-trick': -75, //two champions: still squeezable
-  diverse: 0, //can't be banned out
+    'one-trick': -200, //one champion: fully ban-able
+    'two-trick': -75, //two champions: still squeezable
+    diverse: 0, //can't be banned out
 };
 
 //Champion-pool modifier (-200 .. 0). Unknown/absent values fall back to 'diverse' (no penalty).
 export function versatilityModifier(champPool: string | undefined | null): number {
-  const pool: ChampPool = CHAMP_POOLS.includes(champPool as ChampPool) ? (champPool as ChampPool) : 'diverse';
-  return CHAMP_POOL_MODIFIER[pool];
+    const pool: ChampPool = CHAMP_POOLS.includes(champPool as ChampPool) ? (champPool as ChampPool) : 'diverse';
+    return CHAMP_POOL_MODIFIER[pool];
+}
+
+/*
+    Auto-classify champion-pool depth from recent RANKED champion frequency (what
+    a player actually climbs on, not lifetime mastery). Needs a few games to judge;
+    a sparse history reads as 'diverse' (new / low-level), which is the safe default.
+
+    top champ ≥ 70% of games        → one-trick
+    top two ≥ 80% of games          → two-trick
+    otherwise                       → diverse
+
+    Returns null only when there's no usable sample, so the caller can fall back.
+ */
+export function classifyChampPool(championCounts: Map<string, number>, games: number): ChampPool | null {
+    if (games <= 0 || championCounts.size === 0) return null;
+    //Too few ranked games to read a one-trick — treat as diverse (new/low play).
+    if (games < 10) return 'diverse';
+    const sorted = [...championCounts.values()].sort((a, b) => b - a);
+    const top = sorted[0] ?? 0;
+    const top2 = top + (sorted[1] ?? 0);
+    if (top / games >= 0.7) return 'one-trick';
+    if (top2 / games >= 0.8) return 'two-trick';
+    return 'diverse';
 }
 
 /*
@@ -88,16 +111,16 @@ export function versatilityModifier(champPool: string | undefined | null): numbe
     Ranks and Glicko (post-game gains/losses) still operate on the raw `mmr`.
 */
 export function effectiveMMR(mmr: number, champPool: string | undefined | null): number {
-  return Math.max(0, mmr + versatilityModifier(champPool));
+    return Math.max(0, mmr + versatilityModifier(champPool));
 }
 
-/** Compute the seed MMR for a player from whatever data we have. */
+// Compute the seed MMR for a player from whatever data we have. */
 export function computeSeedMMR(input: SeedInput): number {
-  if (typeof input.manualMMR === 'number' && Number.isFinite(input.manualMMR)) {
-    return clamp(Math.round(input.manualMMR), 0, 6000);
-  }
+    if (typeof input.manualMMR === 'number' && Number.isFinite(input.manualMMR)) {
+        return clamp(Math.round(input.manualMMR), 0, 6000);
+    }
 
-  const base = input.riotRank ? rankToMMR(input.riotRank) : DEFAULT_SEED_MMR;
-  const adjustment = seasonWinRateAdjustment(input.seasonWins, input.seasonLosses);
-  return clamp(Math.round(base + adjustment), 0, 6000);
-}
+    const base = input.riotRank ? rankToMMR(input.riotRank) : DEFAULT_SEED_MMR;
+    const adjustment = seasonWinRateAdjustment(input.seasonWins, input.seasonLosses);
+    return clamp(Math.round(base + adjustment), 0, 6000);
+}                               

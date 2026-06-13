@@ -203,7 +203,7 @@ export default function DiscordPage() {
             <Card>
                 <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-indigo-300">Discord remote</h2>
                 <p className="text-xs text-slate-500">
-                    Every /match command as a button — no typing in Discord needed. The bot executes the action in
+                    Every /match command as a button, no typing in Discord needed. The bot executes the action in
                     your server (channels, moves, MMR) and reports back below. Admin actions skip lobby votes.
                 </p>
                 {notice && <p className="mt-2 text-sm text-amber-300">{notice}</p>}

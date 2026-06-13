@@ -48,7 +48,10 @@ const envSchema = z.object({
       'oc1', 'ph2', 'sg2', 'th2', 'tw2', 'vn2',
     ])
     .default('euw1'),
-  RIOT_RECENT_MATCH_COUNT: z.coerce.number().int().min(0).max(30).default(10),
+  // Ranked games sampled at onboard for the recent-form preview AND champ-pool
+  // auto-detection (champion frequency over these games). ~30 classifies a
+  // one-trick vs diverse well; it's 1+N Riot calls, only at onboard (skipped on reset).
+  RIOT_RECENT_MATCH_COUNT: z.coerce.number().int().min(0).max(30).default(30),
 });
 
 export const env = envSchema.parse(process.env);

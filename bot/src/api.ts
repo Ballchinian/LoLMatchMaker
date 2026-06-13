@@ -42,6 +42,7 @@ export interface ApiPlayer {
     wins: number;
     losses: number;
     gamesPlayed: number;
+    champPool: ChampPool;
     discordUserId?: string;
     rank: { tier: string; label: string };
 }

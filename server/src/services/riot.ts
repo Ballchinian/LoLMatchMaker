@@ -2,7 +2,7 @@ import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type Ax
 import { env, riotEnabled } from '../config/env';
 import { riotLimiter } from './riotLimiter';
 import type { Division, Tier } from './rank';
-import type { RecentForm } from './mmr';
+import { classifyChampPool, type ChampPool, type RecentForm } from './mmr';
 
 /**
  * Thin, normalized Riot Games API client.
@@ -42,6 +42,8 @@ export interface RiotProfile {
   profileIconId?: number;
   rank: RiotRankEntry | null;
   recent: RecentForm | null;
+  /** Champ-pool depth auto-detected from recent ranked champion frequency (null = couldn't tell). */
+  detectedChampPool: ChampPool | null;
 }
 
 const regionalHttp = (): AxiosInstance =>
@@ -126,12 +128,20 @@ interface MatchParticipant {
   kills: number;
   deaths: number;
   assists: number;
+  championName?: string;
 }
 
-/** Sample the player's recent solo/flex matches to derive win rate + average KDA. */
-async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
+/**
+ * Sample the player's recent RANKED matches once, deriving BOTH:
+ *  - recent form (win rate + average KDA, cosmetic preview), and
+ *  - auto-detected champ pool (champion frequency over the same games).
+ * One match fetch serves both, so champ-pool detection costs no extra calls.
+ */
+async function fetchRankedSample(
+  puuid: string,
+): Promise<{ recent: RecentForm | null; champPool: ChampPool | null }> {
   const count = env.RIOT_RECENT_MATCH_COUNT;
-  if (count <= 0) return null;
+  if (count <= 0) return { recent: null, champPool: null };
 
   try {
     const regional = regionalHttp();
@@ -140,7 +150,7 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
       `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
       { params: { count, type: 'ranked' } },
     );
-    if (!matchIds.length) return null;
+    if (!matchIds.length) return { recent: null, champPool: null };
 
     const details = await Promise.all(
       matchIds.map((id) =>
@@ -156,6 +166,7 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
     let games = 0;
     let wins = 0;
     let kdaSum = 0;
+    const champCounts = new Map<string, number>();
     for (const d of details) {
       if (!d) continue;
       const me = d.info.participants.find((p) => p.puuid === puuid);
@@ -163,17 +174,17 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
       games++;
       if (me.win) wins++;
       kdaSum += (me.kills + me.assists) / Math.max(1, me.deaths);
+      if (me.championName) champCounts.set(me.championName, (champCounts.get(me.championName) ?? 0) + 1);
     }
 
-    if (games === 0) return null;
+    if (games === 0) return { recent: null, champPool: null };
     return {
-      games,
-      winRate: wins / games,
-      avgKDA: kdaSum / games,
+      recent: { games, winRate: wins / games, avgKDA: kdaSum / games },
+      champPool: classifyChampPool(champCounts, games),
     };
   } catch {
-    // Recent form is best-effort; failing here shouldn't block injection.
-    return null;
+    // Best-effort; failing here shouldn't block injection.
+    return { recent: null, champPool: null };
   }
 }
 
@@ -272,8 +283,20 @@ export async function findRecentCustomResult(
   return best;
 }
 
-/** Look up a full normalized profile by Riot ID (gameName#tagLine). */
-export async function lookupByRiotId(gameName: string, tagLine: string): Promise<RiotProfile> {
+/**
+ * Look up a full normalized profile by Riot ID (gameName#tagLine).
+ *
+ * `includeRecent` (default true) controls the recent-match sample, which is the
+ * expensive part (1 + up to RIOT_RECENT_MATCH_COUNT match-detail calls). It's
+ * only cosmetic now — seeding uses season W/L from the rank entry, not recent
+ * form — so bulk callers (reset) pass false to stay fast and avoid gateway
+ * timeouts. Search/inject keep it for the preview.
+ */
+export async function lookupByRiotId(
+  gameName: string,
+  tagLine: string,
+  opts: { includeRecent?: boolean } = {},
+): Promise<RiotProfile> {
   assertEnabled();
 
   const cleanName = gameName.trim();
@@ -339,8 +362,12 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
     throw toRiotError(err, 'Ranked data');
   }
 
-  // 4) Recent form (best-effort).
-  const recent = await fetchRecentForm(puuid);
+  // 4) Recent ranked sample → recent form + champ-pool detection.
+  //    Skipped for bulk callers (reset) to stay fast; they keep the existing pool.
+  const sample =
+    opts.includeRecent === false
+      ? { recent: null, champPool: null }
+      : await fetchRankedSample(puuid);
 
   return {
     puuid,
@@ -351,6 +378,7 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
     summonerLevel,
     profileIconId,
     rank,
-    recent,
+    recent: sample.recent,
+    detectedChampPool: sample.champPool,
   };
 }

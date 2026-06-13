@@ -2,10 +2,10 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage, updatePlayerChampPool } from '../api/client';
 import type { ChampPool, Player } from '../api/types';
 
-const POOLS: { value: ChampPool; label: string; mod: number }[] = [
-    { value: 'one-trick', label: 'One-trick', mod: -200 },
-    { value: 'two-trick', label: 'Two-trick', mod: -75 },
-    { value: 'diverse', label: 'Diverse', mod: 0 },
+const POOLS: { value: ChampPool; label: string; mod: number; desc: string }[] = [
+    { value: 'one-trick', label: 'One-trick', mod: -200, desc: 'Peak rank on basically 1 champ' },
+    { value: 'two-trick', label: 'Two-trick', mod: -75, desc: 'Strong on about 2 champs' },
+    { value: 'diverse', label: 'Diverse', mod: 0, desc: 'Comfortable on 3+ (or new / low level)' },
 ];
 
 const fmt = (n: number) => (n > 0 ? `+${n}` : `${n}`);
@@ -32,7 +32,7 @@ export function RolesEditor({ player }: { player: Player }) {
                 <button
                 key={p.value}
                 type="button"
-                title={fmt(p.mod)}
+                title={`${p.desc} (${fmt(p.mod)})`}
                 disabled={mut.isPending}
                 onClick={() => mut.mutate(p.value)}
                 className={`px-2 py-0.5 transition ${

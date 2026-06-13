@@ -25,3 +25,7 @@ Thumbs.db
 
 # vite
 client/.vite/
+
+# personal / not-for-publish docs (kept locally, untracked)
+DEPLOY.md
+toDo.md

@@ -96,6 +96,9 @@ function playerFromRiotProfile(profile: RiotProfile, guildId: string | null) {
     // Confidence in the seed scales with current-season ranked games (250 → 89);
     // an unranked account is a near-unknown (300).
     rd: seedRD(profile.rank ? profile.rank.wins + profile.rank.losses : null),
+    // Champ pool auto-detected from recent ranked champ frequency (admin / /update
+    // can override). Null detection (sparse history / skipped on reset) → diverse.
+    champPool: profile.detectedChampPool ?? 'diverse',
   };
 }
 
@@ -392,7 +395,9 @@ async function performReset(player: PlayerDoc): Promise<{ before: ResetView; aft
   let update: Record<string, unknown>;
   let refreshedFromRiot = false;
   if (player.source === 'riot' && riotEnabled && player.riot?.gameName && player.riot?.tagLine) {
-    const profile = await lookupByRiotId(player.riot.gameName, player.riot.tagLine);
+    // Skip the recent-match sample: it's the expensive part and only cosmetic
+    // (seeding uses season W/L), so a bulk reset stays fast and dodges 504s.
+    const profile = await lookupByRiotId(player.riot.gameName, player.riot.tagLine, { includeRecent: false });
     const draft = playerFromRiotProfile(profile, player.guildId ?? null);
     update = {
       displayName: draft.displayName,
