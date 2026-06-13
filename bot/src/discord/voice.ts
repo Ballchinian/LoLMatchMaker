@@ -172,7 +172,7 @@ export async function deleteChannels(guild: Guild, ids: string[]): Promise<Delet
 }
 
 /*
-    Locate a match's voice channels by their name tag (e.g. "#70f4"), so setup/end/split
+    Locate a match's voice channels by their name tag (e.g. "70f4..."), so setup/end/split
     work regardless of in-memory state (survives bot restarts).
 */
 export interface FoundChannels {
@@ -189,7 +189,7 @@ function labelFromChannelName(name: string): string | null {
 }
 
 /*
-    Tear down channels whose match is no longer IN PROGRESS — e.g. it was
+    Tear down channels whose match is no longer IN PROGRESS e.g. it was
     cancelled, deleted, or confirmed from the WEBPAGE, which the bot otherwise
     never hears about. Members are returned to Lobby first. Only touches voice
     channels inside the inhouse category that follow our naming scheme.

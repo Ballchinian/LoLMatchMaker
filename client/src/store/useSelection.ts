@@ -7,7 +7,7 @@ interface SelectionState {
     selectedIds: string[];
     sameTeam: Pair[];
     oppositeTeam: Pair[];
-    /** Canonical keys of splits already shown, so re-rolls avoid repeats. */
+    //Canonical keys of splits already shown, so re-rolls avoid repeats.
     excludeKeys: string[];
 
     toggle: (id: string) => void;
@@ -38,7 +38,7 @@ export const useSelection = create<SelectionState>((set) => ({
     toggle: (id) =>
         set((s) => {
         if (s.selectedIds.includes(id)) {
-            // Deselecting: also drop any constraints referencing this player.
+            //Deselecting: also drop any constraints referencing this player.
             return {
             selectedIds: s.selectedIds.filter((x) => x !== id),
             sameTeam: dropPairsWith(s.sameTeam, id),
@@ -64,7 +64,7 @@ export const useSelection = create<SelectionState>((set) => ({
         const list = type === 'same' ? s.sameTeam : s.oppositeTeam;
         if (list.some((p) => samePair(p, a, b))) return s;
         const pair: Pair = [a, b];
-        // A pair can't be both same-team and opposite-team; keep them mutually exclusive.
+        //A pair can't be both same-team and opposite-team; keep them mutually exclusive.
         return type === 'same'
             ? {
                 sameTeam: [...s.sameTeam, pair],

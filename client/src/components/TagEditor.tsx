@@ -3,19 +3,18 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiErrorMessage, updatePlayerTags } from '../api/client';
 import type { Player } from '../api/types';
 
-/**
- * Inline editor: shows a player's tags as removable chips.
- * Applying a tag picks from the list of EXISTING tags (across all players), so a
- * typo can't silently create a near-duplicate. Brand-new tags go through an
- * explicit "create" input instead.
- */
+/*
+    Inline editor: shows a player's tags as removable chips.
+    Applying a tag picks from the list of EXISTING tags (across all players), so a
+    typo can't silently create a near duplicate.
+*/
 export function TagEditor({
     player,
     allTags = [],
     readOnly = false,
 }: {
     player: Player;
-    /** Every distinct tag in the roster (see collectTags) — the apply-from list. */
+    //Every distinct tag in the roster (see collectTags): the apply-from list. */
     allTags?: string[];
     readOnly?: boolean;
 }) {
@@ -30,7 +29,7 @@ export function TagEditor({
 
     const tags = player.tags ?? [];
 
-    // Read-only mode (non-admins): plain chips, no editing affordances.
+    //Read only mode (non-admins): plain chips, no editing affordances.
     if (readOnly) {
         if (tags.length === 0) return null;
         return (
@@ -60,8 +59,8 @@ export function TagEditor({
         setInput('');
         setCreating(false);
         if (!t || has(t)) return;
-        // If it already exists roster-wide (maybe with different casing), apply that
-        // spelling instead of minting a variant.
+        //If it already exists roster wide (maybe with different casing), apply that
+        //spelling instead of minting a variant.
         const existing = allTags.find((x) => x.toLowerCase() === t.toLowerCase());
         mutate.mutate([...tags, existing ?? t]);
     };
@@ -112,12 +111,12 @@ export function TagEditor({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {
                 if (e.key === 'Enter') {
-                e.preventDefault();
-                createNew();
+                    e.preventDefault();
+                    createNew();
                 }
                 if (e.key === 'Escape') {
-                setInput('');
-                setCreating(false);
+                    setInput('');
+                    setCreating(false);
                 }
             }}
             onBlur={createNew}
@@ -133,7 +132,7 @@ export function TagEditor({
             disabled={mutate.isPending}
             title="Create a brand-new tag"
             >
-            ✚ new
+                ✚ new
             </button>
         )}
 

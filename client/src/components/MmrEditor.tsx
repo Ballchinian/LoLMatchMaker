@@ -5,7 +5,7 @@ import type { Player } from '../api/types';
 
 const numCls = 'w-16 rounded border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-100 outline-none focus:border-indigo-500';
 
-/** Admin-only: override a player's seed MMR and/or current MMR. */
+//Admin-only: override a player's seed MMR and/or current MMR.
 export function MmrEditor({ player }: { player: Player }) {
     const qc = useQueryClient();
     const [open, setOpen] = useState(false);

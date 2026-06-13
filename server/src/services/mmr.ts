@@ -18,8 +18,9 @@ export interface RecentForm {
 export interface SeedInput {
   /** Ranked snapshot from Riot, if available. */
   riotRank?: RankInput | null;
-  /** Recent performance sample from match history, if available. */
-  recent?: RecentForm | null;
+  /** Current-season ranked wins/losses backing the rank (drives the win-rate seed adjustment). */
+  seasonWins?: number | null;
+  seasonLosses?: number | null;
   /** Explicit MMR override (manual entry of a raw number). Wins over everything. */
   manualMMR?: number | null;
 }
@@ -29,18 +30,31 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 /**
- * Adjustment derived from recent form. Returns a bounded +/- nudge on top of the
- * rank-based base, scaled by how many games we actually sampled (confidence).
+ * Seed adjustment from current-season ranked WIN RATE (KDA is deliberately
+ * ignored — win rate is the cleaner signal at our volumes). Win rate above/below
+ * 50% pushes the rank-based seed up/down, scaled by how many games back it up:
+ *
+ *   - magnitude = (winRate - 0.5) * 2000  → +200 at 60%, +400 at 70%, etc.
+ *   - confidence ramps with games, ~0.25 at 10 games and full by 30 (slightly
+ *     super-linear, so a handful of games barely moves the seed). e.g.
+ *       30 games @ 40% → -200,  60% → +200,  70% → +400 (one tier)
+ *       10 games @ 60% → ~+50,  70% → ~+100
+ *
+ * Capped at ±400 (a full tier) either way.
  */
-export function recentFormAdjustment(recent: RecentForm | null | undefined): number {
-  if (!recent || recent.games <= 0) return 0;
+export function seasonWinRateAdjustment(
+  wins: number | null | undefined,
+  losses: number | null | undefined,
+): number {
+  const w = Math.max(0, wins ?? 0);
+  const l = Math.max(0, losses ?? 0);
+  const games = w + l;
+  if (games <= 0) return 0;
 
-  const winRateComponent = (recent.winRate - 0.5) * 200; // +/-100 at 0%/100% WR
-  const kdaComponent = (recent.avgKDA - 2.5) * 15; // ~baseline KDA of 2.5
-  const raw = winRateComponent + kdaComponent;
-
-  const confidence = clamp(recent.games / 10, 0, 1); // full confidence at 10+ games
-  return clamp(raw * confidence, -150, 150);
+  const winRate = w / games;
+  const magnitude = (winRate - 0.5) * 2000;
+  const confidence = Math.min(1, (games / 30) ** 1.3);
+  return clamp(Math.round(magnitude * confidence), -400, 400);
 }
 
 /* ------------------------- champion versatility ------------------------- */
@@ -84,6 +98,6 @@ export function computeSeedMMR(input: SeedInput): number {
   }
 
   const base = input.riotRank ? rankToMMR(input.riotRank) : DEFAULT_SEED_MMR;
-  const adjustment = recentFormAdjustment(input.recent);
+  const adjustment = seasonWinRateAdjustment(input.seasonWins, input.seasonLosses);
   return clamp(Math.round(base + adjustment), 0, 6000);
 }

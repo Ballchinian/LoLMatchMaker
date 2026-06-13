@@ -1,6 +1,6 @@
 import type { Tier } from '../api/types';
 
-/** Tier -> palette for badges (approximate League tier colors). */
+//Tier -> palette for badges
 export const TIER_COLORS: Record<Tier, { bg: string; border: string; text: string }> = {
     IRON: { bg: '#3f3a3a', border: '#5b5252', text: '#cbbfbf' },
     BRONZE: { bg: '#4a2f1d', border: '#7a4a2a', text: '#d39b6e' },

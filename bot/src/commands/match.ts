@@ -199,7 +199,7 @@ export const match: Command = {
                     .catch(() => undefined);
             }
             //For user confirmation in the ephemeral reply
-            await interaction.editReply(`✅ Auto confirmed, Team ${winner} won ${label}.`);
+            await interaction.editReply(`✔️ Auto confirmed, Team ${winner} won ${label}.`);
             return;
         }
 
@@ -279,8 +279,8 @@ export const match: Command = {
                     { id: 'B', label: 'Team B won', emoji: '🏆', style: ButtonStyle.Secondary },
                 ],
                 onDecided: (team) =>
-                    performIfStillPending(team as 'A' | 'B', `🗳️ The lobby has spoken, **Team ${team}** won!`),
-                expiredText: `⏰ The vote on who won **${label}** expired without a majority.`,
+                    performIfStillPending(team as 'A' | 'B', `**Team ${team}** won!`),
+                expiredText: `The vote on who won **${label}** expired without a majority.`,
             });
             await interaction.editReply(
                 `🗳️ Winner vote opened for ${label}, first team to ${votesNeeded} vote(s) gets recorded.`,
@@ -304,7 +304,7 @@ export const match: Command = {
             eligible,
             votesNeeded,
             options: [
-                { id: 'approve', label: 'Approve', emoji: '✅', style: ButtonStyle.Success, needed: approveNeeded },
+                { id: 'approve', label: 'Approve', emoji: '✔️', style: ButtonStyle.Success, needed: approveNeeded },
                 { id: 'reject', label: 'Reject', emoji: '❌', style: ButtonStyle.Danger },
             ],
             //A passed setup vote starts the game: its chat thread lives on with the match
@@ -314,9 +314,9 @@ export const match: Command = {
                 choice === 'reject'
                     ? Promise.resolve(`❌ Vote failed, the request to ${desc} was rejected.`)
                     : performIfStillPending(winner, '🗳️ Vote passed!'),
-            expiredText: `⏰ The vote to ${desc} expired without enough votes.`,
+            expiredText: `The vote to ${desc} expired without enough votes.`,
         });
-        await interaction.editReply(`🗳️ Vote opened for ${label}, ${approveNeeded} ✅ and it happens.`);
+        await interaction.editReply(`🗳️ Vote opened for ${label}, ${approveNeeded} ✔️ and it happens.`);
     },
 
     async autocomplete(interaction) {

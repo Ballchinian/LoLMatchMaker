@@ -28,13 +28,13 @@ function TeamSide({ team, label, highlight }: { team: RosterEntry[]; label: stri
                 {team.map((e) => (
                 <li key={e.player} className="flex items-center justify-between text-sm">
                     <span className="text-slate-200">{e.displayName}</span>
-                    {e.before != null && e.after != null ? (
+                        {e.before != null && e.after != null ? (
                     <span className="flex items-center gap-2">
                         <span className="text-slate-500">
-                        {e.before}→{e.after}
+                            {e.before}→{e.after}
                         </span>
                         <span className={(e.delta ?? 0) >= 0 ? 'font-semibold text-emerald-400' : 'font-semibold text-rose-400'}>
-                        {(e.delta ?? 0) >= 0 ? `+${e.delta}` : e.delta}
+                            {(e.delta ?? 0) >= 0 ? `+${e.delta}` : e.delta}
                         </span>
                     </span>
                     ) : (
@@ -76,11 +76,11 @@ function PendingCard({ m }: { m: MatchRecord }) {
             <span className="flex items-center gap-2">
             {m.status === 'inProgress' ? (
                 <span className="rounded-full border border-sky-700/50 bg-sky-900/30 px-2 py-0.5 font-semibold text-sky-300">
-                In game
+                    In game
                 </span>
             ) : (
                 <span className="rounded-full border border-amber-700/50 bg-amber-900/30 px-2 py-0.5 font-semibold text-amber-300">
-                Pending
+                    Pending
                 </span>
             )}
             {m.name && <span className="font-semibold text-slate-200">{m.name}</span>}
@@ -105,7 +105,7 @@ function PendingCard({ m }: { m: MatchRecord }) {
             )}
             {m.proposedWinner && (
                 <>
-                {' '}· claims <span className="text-amber-300">Team {m.proposedWinner}</span> won
+                    {' '}· claims <span className="text-amber-300">Team {m.proposedWinner}</span> won
                 </>
             )}
             </p>

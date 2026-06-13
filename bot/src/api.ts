@@ -1,10 +1,10 @@
 import { config } from './config';
 
-/**
- * Minimal client for the Match Maker backend, authenticated as the `bot` actor.
- * Every call names its Discord guild (X-Guild-Id): the backend partitions all
- * players/matches per server, so the bot must always say which one it means.
- */
+/*
+    Minimal client for the Match Maker backend, authenticated as the `bot` actor.
+    Every call names its Discord guild (X-Guild-Id): the backend partitions all
+    players/matches per server, so the bot must always say which one it means.
+*/
 
 async function req<T>(
     guildId: string,
@@ -14,13 +14,13 @@ async function req<T>(
     const { timeoutMs = 15_000, ...rest } = init ?? {};
     const res = await fetch(`${config.API_BASE_URL}${path}`, {
         ...rest,
-        // Fail fast instead of hanging on a cold/unreachable API. Autocomplete
-        // passes a much tighter budget (Discord only allows ~3s to respond).
+        //Fail fast instead of hanging on a cold/unreachable API. Autocomplete
+        //passes a much tighter budget (Discord only allows ~3s to respond).
         signal: AbortSignal.timeout(timeoutMs),
         headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${config.BOT_TOKEN}`,
-            //Omitted for global calls (e.g. claim-next across all guilds)
+            //Omitted for global calls (e.g. claim next across all guilds)
             ...(guildId ? { 'X-Guild-Id': guildId } : {}),
             ...(rest.headers ?? {}),
         },
@@ -92,15 +92,30 @@ export const apiConfirmMatch = (guildId: string, id: string, winner: 'A' | 'B') 
 export const apiDeleteMatch = (guildId: string, id: string) =>
     req<{ ok: boolean }>(guildId, `/matches/${id}`, { method: 'DELETE' });
 
-/**
- * Ask the server to find the played custom game in Riot match history.
- * null = couldn't tell (customs aren't guaranteed to be indexed) — ask the humans.
- * Generous timeout: the server fans out several Riot API calls.
- */
+/*
+    Ask the server to find the played custom game in Riot match history.
+    null = couldn't tell (customs aren't guaranteed to be indexed) — ask the humans.
+    Generous timeout: the server fans out several Riot API calls.
+*/
 export const apiDetectWinner = (guildId: string, id: string) =>
     req<{ detected: { winner: 'A' | 'B'; gameId: string } | null }>(guildId, `/matches/${id}/detected-winner`, {
     timeoutMs: 30_000,
   }).then((r) => r.detected);
+
+
+//Inject (create) a player from a Riot ID. Throws if the account is already on the
+//roster. `addedBy` records who created it (the /link invoker) for provenance.
+export const apiInjectRiotPlayer = (guildId: string, gameName: string, tagLine: string, addedBy?: string) =>
+    req<{ player: ApiPlayer }>(guildId, '/players', {
+        method: 'POST',
+        body: JSON.stringify({ source: 'riot', gameName, tagLine, addedBy }),
+    }).then((r) => r.player);
+
+//Permanently delete a player (used by /unlink to remove an unplayed self-add).
+export const apiDeletePlayer = (guildId: string, playerId: string) =>
+    req<{ ok: boolean }>(guildId, `/players/${playerId}`, { method: 'DELETE' });
+
+//Link a player to a Discord user.
 
 export const apiLinkDiscord = (guildId: string, playerId: string, discordUserId: string | null) =>
     req<{ player: ApiPlayer }>(guildId, `/players/${playerId}/discord`, {
@@ -110,7 +125,7 @@ export const apiLinkDiscord = (guildId: string, playerId: string, discordUserId:
 
 export type ChampPool = 'one-trick' | 'two-trick' | 'diverse';
 
-/** Set a player's champion-pool depth (the only versatility MMR modifier). */
+//Set a player's champion pool depth (the only versatility MMR modifier).
 export const apiUpdateRoles = (
     guildId: string,
     playerId: string,
@@ -121,9 +136,9 @@ export const apiUpdateRoles = (
     body: JSON.stringify(input),
   }).then((r) => r.player);
 
-/* ----------------------- multi-tenancy / setup ------------------------- */
+/* ----------------------- multitenancy / setup ------------------------- */
 
-/** /setup registers this guild as a tenant; returns the website server key. */
+// /setup registers this guild as a tenant; returns the website server key.
 export const apiRegisterServer = (
     guildId: string,
     input: { guildName: string; ownerId: string; invokerId: string; password?: string; rotateKey?: boolean },
@@ -133,45 +148,9 @@ export const apiRegisterServer = (
     body: JSON.stringify({ guildId, ...input }),
   });
 
-/** Purge this guild and all its data (called when the bot is kicked). */
+//Purge this guild and all its data (called when the bot is kicked).
 export const apiPurgeServer = (guildId: string) =>
     req<{ ok: boolean }>(guildId, `/servers/${guildId}`, { method: 'DELETE' });
-
-/* ------------------------------- resets -------------------------------- */
-
-export interface ApiResetView {
-    displayName: string;
-    mmr: number;
-    seedMMR: number;
-    rd: number;
-    wins: number;
-    losses: number;
-    gamesPlayed: number;
-    riotRank: string | null;
-}
-
-/** Reset one player: riot refresh + re-seeded MMR/RD + zeroed record. Link kept. */
-export const apiResetPlayer = (guildId: string, playerId: string) =>
-    req<{ player: ApiPlayer; before: ApiResetView; after: ApiResetView; refreshedFromRiot: boolean }>(
-        guildId,
-        `/players/${playerId}/reset`,
-        { method: 'POST', timeoutMs: 30_000 },
-    );
-
-export interface ApiResetAllResult {
-    id: string;
-    displayName: string;
-    before?: ApiResetView;
-    after?: ApiResetView;
-    error?: string;
-}
-
-/** Reset EVERY player on this server. Slow with many riot players (sequential refetch). */
-export const apiResetAllPlayers = (guildId: string) =>
-    req<{ results: ApiResetAllResult[]; reset: number; failed: number }>(guildId, '/players/reset-all', {
-        method: 'POST',
-        timeoutMs: 300_000,
-    });
 
 /* --------------------------- command queue ----------------------------- */
 
@@ -187,11 +166,11 @@ export interface ApiBotCommand {
     createdAt: string;
 }
 
-/**
- * Claim the oldest queued website command across ALL of the bot's guilds in one
- * request (constant polling cost regardless of how many servers the bot is in).
- * The returned command carries its own guildId. No X-Guild-Id needed.
- */
+/*
+    Claim the oldest queued website command across ALL of the bot's guilds in one
+    request (constant polling cost regardless of how many servers the bot is in).
+    The returned command carries its own guildId. No X-Guild-Id needed.
+*/
 export const apiClaimNextBotCommand = () =>
     req<{ command: ApiBotCommand | null }>('', '/bot-commands/claim-next', {
         method: 'POST',

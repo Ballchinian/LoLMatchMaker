@@ -7,7 +7,7 @@ import {
 } from 'discord.js';
 import { config } from '../config';
 
-/** Website tier (uppercase) -> Discord role display name. */
+//Website tier (uppercase) -> Discord role display name.
 const TIER_DISPLAY: Record<string, string> = {
     IRON: 'Iron',
     BRONZE: 'Bronze',
@@ -85,7 +85,7 @@ export function ensureAdminRole(guild: Guild): Promise<Role> {
     return ensureRole(guild, config.ADMIN_ROLE_NAME, { color: 0xd4af37, hoist: false, mentionable: true });
 }
 
-//Create the admin + Linked + all tier roles (for first-time setup).
+//Create the admin + Linked + all tier roles (for first time setup).
 export async function ensureAllRoles(guild: Guild): Promise<void> {
     await ensureAdminRole(guild);
     await ensureLinkedRole(guild);

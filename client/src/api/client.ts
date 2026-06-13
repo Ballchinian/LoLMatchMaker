@@ -13,19 +13,21 @@ import type {
     Division,
 } from './types';
 
-/** localStorage key holding the admin/bot token (if the user has unlocked). */
+//localStorage key holding the admin/bot token (if the user has unlocked).
 export const TOKEN_KEY = 'lmm_token';
-/** localStorage key holding the Discord server key (which server's data we browse). */
+//localStorage key holding the Discord server key (which server's data we browse).
 export const SERVER_KEY = 'lmm_server_key';
-/** localStorage key holding the map of matchId -> proposal token ("my" proposals). */
+// localStorage key holding the map of matchId -> proposal token ("my" proposals).
 export const PROPOSALS_KEY = 'lmm_proposals';
 
-// In dev, '/api' is proxied to the backend by Vite. In production set VITE_API_BASE_URL
-// to your backend's API base (e.g. https://your-app.up.railway.app/api), OR leave it unset
-// and proxy /api via Netlify (see netlify.toml).
+/*
+    In dev, '/api' is proxied to the backend by Vite. In production set VITE_API_BASE_URL
+    to your backend's API base (e.g. https://your-app.up.railway.app/api), OR leave it unset
+    and proxy /api via Netlify (see netlify.toml).
+*/
 export const api = axios.create({ baseURL: import.meta.env.VITE_API_BASE_URL ?? '/api' });
 
-// Attach the stored token + server scope to every request; harmless on public endpoints.
+//Attach the stored token + server scope to every request; harmless on public endpoints.
 api.interceptors.request.use((config) => {
     const token = localStorage.getItem(TOKEN_KEY);
     if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -44,7 +46,7 @@ function readProposals(): Record<string, string> {
     }
 }
 
-/** Remember the secret that lets this browser delete its own proposal. */
+//Remember the secret that lets this browser delete its own proposal. 
 export function rememberProposal(matchId: string, token: string): void {
     const all = readProposals();
     all[matchId] = token;
@@ -61,7 +63,7 @@ export function forgetProposal(matchId: string): void {
     localStorage.setItem(PROPOSALS_KEY, JSON.stringify(all));
 }
 
-/** Pull a human-readable message out of an axios error. */
+//Pull a human readable message out of an axios error.
 export function apiErrorMessage(err: unknown): string {
     if (axios.isAxiosError(err)) {
         return (err.response?.data as { error?: string } | undefined)?.error ?? err.message;
@@ -116,12 +118,13 @@ export async function injectManualPlayer(input: ManualPlayerInput): Promise<Play
     return data.player;
 }
 
+
 export async function updatePlayerTags(id: string, tags: string[]): Promise<Player> {
     const { data } = await api.patch<{ player: Player }>(`/players/${id}/tags`, { tags });
     return data.player;
 }
 
-/** Admin: clear a player's Discord link (e.g. they linked the wrong account). */
+//Admin: clear a player's Discord link (e.g. they linked the wrong account).
 export async function unlinkPlayerDiscord(id: string): Promise<Player> {
     const { data } = await api.patch<{ player: Player }>(`/players/${id}/discord`, {
         discordUserId: null,
@@ -129,18 +132,18 @@ export async function unlinkPlayerDiscord(id: string): Promise<Player> {
     return data.player;
 }
 
-/** Admin: set a player's champion-pool depth (the versatility MMR modifier). */
+//Admin: set a player's champion-pool depth (the versatility MMR modifier).
 export async function updatePlayerChampPool(id: string, champPool: ChampPool): Promise<Player> {
     const { data } = await api.patch<{ player: Player }>(`/players/${id}/roles`, { champPool });
     return data.player;
 }
 
-/** Admin: permanently delete a player (website only; blocked if they're in an open match). */
+//Admin: permanently delete a player (website only; blocked if they're in an open match).
 export async function deletePlayer(id: string): Promise<void> {
     await api.delete(`/players/${id}`);
 }
 
-/** Admin override of a player's seed and/or current MMR. */
+//Admin override of a player's seed and/or current MMR.
 export async function updatePlayerMmr(
     id: string,
     input: { seedMMR?: number; mmr?: number },
@@ -174,14 +177,14 @@ export async function getMatches(): Promise<MatchRecord[]> {
   return data.matches;
 }
 
-/**
- * Create a matchup.
- * - admin/bot with `winner` → confirmed immediately
- * - admin/bot without `winner` → pending
- * - public → always pending; must say which roster player they are
- *   (`proposedByPlayerId`, one open proposal each); the returned
- *   `proposalToken` lets this browser delete its own proposal later
- */
+/*
+    Create a matchup.
+    - admin/bot with `winner` → confirmed immediately
+    - admin/bot without `winner` → pending
+    - public → always pending; must say which roster player they are
+    (`proposedByPlayerId`, one open proposal each); the returned
+    `proposalToken` lets this browser delete its own proposal later
+*/
 export async function createMatch(input: {
     teamA: string[];
     teamB: string[];
@@ -209,10 +212,10 @@ export async function confirmMatch(
     return data;
 }
 
-/**
- * Delete a match. Admins delete any pending/in-progress match; a non-admin
- * proposer deletes their OWN pending proposal via the stored proposal token.
- */
+/*
+    Delete a match. Admins delete any pending/in-progress match; a non-admin
+    proposer deletes their OWN pending proposal via the stored proposal token.
+*/
 export async function deleteMatch(id: string): Promise<void> {
     const token = getProposalToken(id);
     await api.delete(`/matches/${id}`, {
@@ -221,13 +224,13 @@ export async function deleteMatch(id: string): Promise<void> {
     forgetProposal(id);
 }
 
-/** Cancel an in-progress match: back to proposed (nothing is deleted). */
+//Cancel an in-progress match: back to proposed (nothing is deleted). 
 export async function cancelMatch(id: string): Promise<MatchRecord> {
     const { data } = await api.post<{ match: MatchRecord }>(`/matches/${id}/stop`, {});
     return data.match;
 }
 
-/** Reverse a confirmed match: undoes MMR, keeps it in history as reversed. */
+//Reverse a confirmed match: undoes MMR, keeps it in history as reversed.
 export async function reverseMatch(
     id: string,
 ): Promise<{ match: MatchRecord; players: Player[] }> {
@@ -237,7 +240,7 @@ export async function reverseMatch(
 
 /* -------------------------------- auth --------------------------------- */
 
-/** Validate the current token and return the actor role (throws on invalid). */
+//Validate the current token and return the actor role (throws on invalid).
 export async function verifyToken(): Promise<{ actor: Actor; guildName?: string }> {
     const { data } = await api.get<{
         actor: Actor;
@@ -248,7 +251,7 @@ export async function verifyToken(): Promise<{ actor: Actor; guildName?: string 
     return { actor: data.actor, guildName: data.guildName };
 }
 
-/** Exchange a server key + admin password for a per-server admin token. */
+//Exchange a server key + admin password for a per-server admin token.
 export async function serverLogin(
     serverKey: string,
     password: string,
@@ -260,7 +263,7 @@ export async function serverLogin(
     return data;
 }
 
-/** Resolve a server key to its Discord server name (throws on unknown key). */
+//Resolve a server key to its Discord server name (throws on unknown key).
 export async function lookupServer(serverKey: string): Promise<{ guildId: string; guildName: string }> {
     const { data } = await api.get<{ guildId: string; guildName: string }>('/servers/lookup', {
         params: { key: serverKey },
@@ -270,7 +273,7 @@ export async function lookupServer(serverKey: string): Promise<{ guildId: string
 
 /* ------------------------------- resets -------------------------------- */
 
-/** Admin: reset one player (riot refresh + re-seed + zeroed record; link kept). */
+//Admin: reset one player (riot refresh + re-seed + zeroed record; link kept).
 export async function resetPlayer(
     id: string,
 ): Promise<{ player: Player; before: ResetView; after: ResetView; refreshedFromRiot: boolean }> {
@@ -285,7 +288,7 @@ export async function resetPlayer(
 
 /* --------------------------- Discord commands --------------------------- */
 
-/** Admin: queue a Discord match action for the bot to run. */
+//Admin: queue a Discord match action for the bot to run.
 export async function enqueueBotCommand(input: {
     action: BotCommandRecord['action'];
     matchId: string;
@@ -295,7 +298,7 @@ export async function enqueueBotCommand(input: {
     return data.command;
 }
 
-/** Admin: recent Discord-tab commands and their outcomes. */
+//Admin: recent Discord-tab commands and their outcomes.
 export async function getBotCommands(): Promise<BotCommandRecord[]> {
     const { data } = await api.get<{ commands: BotCommandRecord[] }>('/bot-commands');
     return data.commands;

@@ -63,6 +63,11 @@ export interface PlayerAttrs {
   champPool: ChampPool;
   /** Discord user id linked to this player (for the bot to map voice members). */
   discordUserId?: string;
+  /**
+   * Provenance: Discord id of whoever created this entry (the bot's /link). Null
+   * for admin/website injects. Lightweight audit only — not a security control.
+   */
+  addedBy?: string | null;
 }
 
 export interface PlayerMethods {
@@ -179,6 +184,9 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
 
     // Discord link (one Discord account ↔ one player PER SERVER). Mutable.
     discordUserId: { type: String },
+
+    // Provenance of who created this entry (bot /link invoker); null for admin adds.
+    addedBy: { type: String, default: null },
   },
   { timestamps: true },
 );

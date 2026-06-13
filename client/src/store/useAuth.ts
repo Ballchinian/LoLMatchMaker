@@ -5,15 +5,15 @@ import type { Actor } from '../api/types';
 interface AuthState {
     token: string | null;
     actor: Actor | null;
-    /** Discord server key scoping which server's data we browse (null = none/legacy). */
+    //Discord server key scoping which server's data we browse (null = none/legacy). 
     serverKey: string | null;
-    /** Display name of the connected Discord server, once known. */
+    //Display name of the connected Discord server, once known. 
     serverName: string | null;
-    /** Persist a verified token + role and unlock privileged UI. */
+    //Persist a verified token + role and unlock privileged UI. 
     setAuth: (token: string, actor: Actor, serverName?: string | null) => void;
-    /** Stash a token so the request interceptor sends it (used before verifying). */
+    //Stash a token so the request interceptor sends it (used before verifying). 
     stash: (token: string) => void;
-    /** Persist the server key the interceptor scopes every request with. */
+    //Persist the server key the interceptor scopes every request with. 
     setServer: (serverKey: string | null, serverName?: string | null) => void;
     clear: () => void;
 }

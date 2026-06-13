@@ -35,21 +35,21 @@ export function joinLink(serverKey: string): string {
 function infoParts(commandsChannelId: string, serverKey: string): string[] {
     const signup =
         `## LoL Match Maker\n` +
-        `**Open this server's site (one click):** ${joinLink(serverKey)}\n` +
-        `That scopes the website to THIS server. Keep the link inside this server. ` +
-        `(Manual entry key, if you need it: \`${serverKey}\`)\n\n` +
+        `**Open this server's site:** ${joinLink(serverKey)}\n` +
+        `That scopes the website to THIS server. ` +
+        `(Manual entry key: \`${serverKey}\`)\n\n` +
         `**How to sign up**\n` +
-        `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\` (answer the champion pool question).\n` +
+        `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\`.\n` +
         `2. That unlocks the server and gives you a rank role synced from the website.\n` +
         `3. Linked the wrong account? \`/unlink\`, then /link again.`;
 
     const lifecycle =
         `**How a match lives** (proposed → in progress → completed)\n` +
         `1. **Propose**: build the teams on the website and submit the match (non-admins: one open proposal at a time; you can delete your own with \`/match delete\`).\n` +
-        `2. **Start**: \`/match setup\` — every linked player in the lobby must approve. Channels are created, teams are moved in, and a match chat thread opens for as long as the game runs (max ~2 hours).\n` +
+        `2. **Start**: \`/match setup\` every linked player in the lobby must approve. Channels are created, teams are moved in, and a match chat thread opens for as long as the game runs (max ~2 hours).\n` +
         `3. **Play**: \`/match join\` / \`/match split\` move everyone between Game Comms and team channels. Players can only be in one active game at a time.\n` +
-        `4. **Finish**: \`/match confirm\` — the bot auto detects the winner from Riot match history when it can; otherwise an admin decides or the lobby votes. MMR is applied and the match is final (admins can do the same from the website).\n` +
-        `5. Changed plans? \`/match cancel\` returns an active game to proposed; \`/match delete\` removes it (in-progress deletion needs an admin or a unanimous vote).`;
+        `4. **Finish**: \`/match confirm\` the bot auto detects the winner from Riot match history when it can; otherwise an admin decides or the lobby votes. MMR is applied and the match is final (admins can do the same from the website).\n` +
+        `5. Changed plans? \`/match cancel\` returns an active game to proposed; \`/match delete\` removes it (in progress deletion needs an admin or a unanimous vote).`;
 
     const commands =
         `**Bot commands** (only work in <#${commandsChannelId}>)\n` +
@@ -59,7 +59,7 @@ function infoParts(commandsChannelId: string, serverKey: string): string[] {
         `\`/match confirm\` : record the winner and apply MMR. Leave \`winner\` empty and the bot auto detects it from Riot match history\n` +
         `\`/match cancel\` : stop an active game, back to proposed\n` +
         `\`/match delete\` : delete a proposal (or void an active game)\n` +
-        `\`/update\` : change your champion pool answer\n\n` +
+        `\`/update\` : change your champion pool answer, this affects your MMR\n\n` +
         `Not an admin? Match commands open a lobby vote: a majority of the game's linked players decides (starting or voiding a game needs everyone).`;
 
     return [signup, lifecycle, commands];
@@ -124,7 +124,7 @@ export const setup: Command = {
             await interaction.editReply(
                 `❌ Couldn't register this server with the backend: ${(err as Error).message}\n` +
                 `The **server owner** must run \`/setup password:<website admin password>\` once — that becomes this server's website admin login. ` +
-                `Other admins can re-run \`/setup\` (no password) any time to repair roles/channels.`,
+                `Other admins can rerun \`/setup\` (no password) any time to repair roles/channels.`,
             );
             return;
         }
@@ -316,21 +316,21 @@ export const setup: Command = {
 
         const link = joinLink(serverKey);
         const websiteNote = serverCreated
-            ? `🌐 **Website access for this server**: one-click link \`${link}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
+            ? `**Website access for this server**: one-click link \`${link}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
                 `Members click it to see this server's data; admins then unlock with the password you just set.\n\n`
             : rotatedKey
-                ? `🌐 Server key **rotated** — the old link no longer works, re-share: \`${link}\` ` +
+                ? `Server key **rotated** — the old link no longer works, re-share: \`${link}\` ` +
                     (password ? '(website admin password also updated, old logins signed out).\n\n' : '\n\n')
                 : password
-                    ? `🌐 Website admin password **updated** — existing website logins are signed out. Server link (unchanged): \`${link}\`.\n\n`
-                    : `🌐 Server already registered — link: \`${link}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
+                    ? `Website admin password **updated** — existing website logins are signed out. Server link (unchanged): \`${link}\`.\n\n`
+                    : `Server already registered — link: \`${link}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
 
         await interaction.editReply(
         `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + match lifecycle + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +
             websiteNote +
             `Give **${config.ADMIN_ROLE_NAME}** to anyone who should run admin commands without "Manage Server".\n\n` +
             `**#${config.COMMANDS_CHANNEL_NAME}** is the commands channel: slash commands ONLY work there (signup via /link included), ` +
-            `normal messages are auto-deleted, and match votes are posted there so they can't get buried.\n\n` +
+            `normal messages are autodeleted, and match votes are posted there so they can't get buried.\n\n` +
             `**One manual step to gate the server:** Server Settings → Roles → **@everyone** → turn **OFF** "View Channels".\n` +
             `Unlinked members will then only see **#${config.COMMANDS_CHANNEL_NAME}**. Running **/link** there grants the ` +
             `**${config.LINKED_ROLE_NAME}** role (which has View Channels) plus their rank role, unlocking the server.\n` +

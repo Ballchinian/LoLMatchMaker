@@ -65,7 +65,8 @@ function playerFromRiotProfile(profile: RiotProfile, guildId: string | null) {
     riotRank: profile.rank
       ? { tier: profile.rank.tier, division: profile.rank.division, leaguePoints: profile.rank.leaguePoints }
       : null,
-    recent: profile.recent,
+    seasonWins: profile.rank?.wins,
+    seasonLosses: profile.rank?.losses,
   });
 
   return {
@@ -152,6 +153,11 @@ playersRouter.post(
   }),
 );
 
+// Provenance: the Discord id of whoever created this entry (the bot's /link passes
+// the invoker). Null for admin/website injects. Lightweight audit, not a security
+// control — the bot's 1:1 Discord↔player link is what bounds self-onboarding.
+const addedByField = z.string().max(32).optional();
+
 const manualSchema = z.object({
   source: z.literal('manual'),
   displayName: z.string().min(1).max(64),
@@ -165,6 +171,7 @@ const manualSchema = z.object({
     .optional(),
   mmr: z.number().int().min(0).max(6000).optional(),
   tags: tagsField,
+  addedBy: addedByField,
 });
 
 const riotInjectSchema = z.object({
@@ -172,6 +179,7 @@ const riotInjectSchema = z.object({
   gameName: z.string().min(1),
   tagLine: z.string().min(1),
   tags: tagsField,
+  addedBy: addedByField,
 });
 
 const injectSchema = z.discriminatedUnion('source', [manualSchema, riotInjectSchema]);
@@ -222,7 +230,11 @@ playersRouter.post(
       throw new ApiError(409, 'This player has already been injected and cannot be re-uploaded.');
     }
 
-    const player = await Player.create({ ...attrs, tags: normalizeTags(body.tags) });
+    const player = await Player.create({
+      ...attrs,
+      tags: normalizeTags(body.tags),
+      addedBy: body.addedBy ?? null,
+    });
     res.status(201).json({ player: player.toPublic() });
   }),
 );
@@ -433,9 +445,10 @@ playersRouter.post(
 );
 
 /**
- * DELETE /api/players/:id — permanently remove a player (admin, website only).
+ * DELETE /api/players/:id — permanently remove a player (admin/bot).
  * Blocked while they're in an OPEN match (resolve those first); confirmed
  * history keeps its own displayName/MMR snapshots, so it's unaffected.
+ * (The bot's /unlink uses this to delete an unplayed self-added player.)
  */
 playersRouter.delete(
   '/:id',

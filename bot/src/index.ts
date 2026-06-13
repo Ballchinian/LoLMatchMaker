@@ -270,17 +270,17 @@ client.on(Events.GuildDelete, async (guild) => {
     }
 });
 
-/**
- * Discord error 10062 "Unknown interaction": the 3-second ack window expired
- * (slow/cold API, or another bot instance with this token already answered).
- * There is nothing left to reply to, so don't try — just note it briefly.
- */
+/*
+    Discord error 10062 "Unknown interaction": the 3-second ack window expired
+    (slow/cold API, or another bot instance with this token already answered).
+    There is nothing left to reply to, so don't try — just note it briefly.
+*/
 function isUnknownInteraction(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 10062;
 }
 
-// Keep the commands channel command-only: anything that isn't from this bot
-// (chatter, stray bot messages) is removed so votes/notices never get buried.
+//Keep the commands channel command-only: anything that isn't from this bot
+//(chatter, stray bot messages) is removed so votes/notices never get buried.
 client.on(Events.MessageCreate, async (message) => {
     if (!message.inGuild() || message.author.id === client.user?.id) return;
     if (message.channelId !== commandsChannelId(message.guild)) return;
@@ -288,14 +288,14 @@ client.on(Events.MessageCreate, async (message) => {
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
-    // All commands live in the commands channel (until /setup creates it, anywhere goes).
+    //All commands live in the commands channel (until /setup creates it, anywhere goes).
     const required = commandsChannelId(interaction.guild);
     const wrongChannel = required !== null && interaction.channelId !== required;
 
     if (interaction.isAutocomplete()) {
         if (wrongChannel) {
-        await interaction.respond([]).catch(() => undefined);
-        return;
+            await interaction.respond([]).catch(() => undefined);
+            return;
         }
         const cmd = commandMap.get(interaction.commandName);
         if (cmd?.autocomplete) {
@@ -314,27 +314,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
     if (interaction.isChatInputCommand()) {
         if (wrongChannel) {
-        await interaction
-            .reply({ content: `❌ Commands only work in <#${required}>.`, flags: MessageFlags.Ephemeral })
-            .catch(() => undefined);
-        return;
+            await interaction
+                .reply({ content: `❌ Commands only work in <#${required}>.`, flags: MessageFlags.Ephemeral })
+                .catch(() => undefined);
+            return;
         }
         const cmd = commandMap.get(interaction.commandName);
         if (!cmd) return;
         try {
-        await cmd.execute(interaction);
+            await cmd.execute(interaction);
         } catch (err) {
-        if (isUnknownInteraction(err)) {
-            console.warn('[command] interaction expired before we could respond (slow API or duplicate bot instance)');
-            return;
-        }
-        console.error('[command]', err);
-        const content = `❌ ${(err as Error).message}`;
-        if (interaction.deferred || interaction.replied) {
-            await interaction.editReply(content).catch(() => undefined);
-        } else {
-            await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => undefined);
-        }
+            if (isUnknownInteraction(err)) {
+                console.warn('[command] interaction expired before we could respond (slow API or duplicate bot instance)');
+                return;
+            }
+            console.error('[command]', err);
+            const content = `❌ ${(err as Error).message}`;
+            if (interaction.deferred || interaction.replied) {
+                await interaction.editReply(content).catch(() => undefined);
+            } else {
+                await interaction.reply({ content, flags: MessageFlags.Ephemeral }).catch(() => undefined);
+            }
         }
     }
 });

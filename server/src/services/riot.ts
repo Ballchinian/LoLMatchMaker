@@ -1,5 +1,6 @@
-import axios, { AxiosError, type AxiosInstance } from 'axios';
+import axios, { AxiosError, type AxiosInstance, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import { env, riotEnabled } from '../config/env';
+import { riotLimiter } from './riotLimiter';
 import type { Division, Tier } from './rank';
 import type { RecentForm } from './mmr';
 
@@ -57,6 +58,34 @@ const platformHttp = (): AxiosInstance =>
     timeout: 8000,
   });
 
+/** How many times to retry a call that still 429s after the proactive throttle. */
+const RIOT_429_RETRIES = 3;
+
+/**
+ * Every Riot GET goes through here: it waits for the outbound limiter, then —
+ * as a safety net if the budget is still exceeded (e.g. another process sharing
+ * the key) — honours a 429's Retry-After and retries a few times before giving
+ * up. Proactive throttling means 429s should be rare; this stops a transient one
+ * from failing a whole reset.
+ */
+async function riotGet<T>(http: AxiosInstance, url: string, config?: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  for (let attempt = 0; ; attempt++) {
+    await riotLimiter.acquire();
+    try {
+      return await http.get<T>(url, config);
+    } catch (err) {
+      const status = err instanceof AxiosError ? err.response?.status : undefined;
+      if (status === 429 && attempt < RIOT_429_RETRIES) {
+        const retryAfter = Number(err instanceof AxiosError ? err.response?.headers['retry-after'] : 0);
+        //Riot's Retry-After is in seconds; fall back to a short backoff.
+        await new Promise((r) => setTimeout(r, (Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : 2) * 1000));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 function toRiotError(err: unknown, context: string): RiotError {
   if (err instanceof AxiosError) {
     const status = err.response?.status ?? 502;
@@ -106,7 +135,8 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
 
   try {
     const regional = regionalHttp();
-    const { data: matchIds } = await regional.get<string[]>(
+    const { data: matchIds } = await riotGet<string[]>(
+      regional,
       `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
       { params: { count, type: 'ranked' } },
     );
@@ -114,10 +144,10 @@ async function fetchRecentForm(puuid: string): Promise<RecentForm | null> {
 
     const details = await Promise.all(
       matchIds.map((id) =>
-        regional
-          .get<{ info: { participants: MatchParticipant[] } }>(
-            `/lol/match/v5/matches/${encodeURIComponent(id)}`,
-          )
+        riotGet<{ info: { participants: MatchParticipant[] } }>(
+          regional,
+          `/lol/match/v5/matches/${encodeURIComponent(id)}`,
+        )
           .then((r) => r.data)
           .catch(() => null),
       ),
@@ -185,7 +215,8 @@ export async function findRecentCustomResult(
   const candidateIds = new Set<string>();
   for (const puuid of samples) {
     try {
-      const { data } = await regional.get<string[]>(
+      const { data } = await riotGet<string[]>(
+        regional,
         `/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids`,
         { params: { startTime: Math.floor(sinceMs / 1000), count: 5 } },
       );
@@ -205,8 +236,7 @@ export async function findRecentCustomResult(
   }
   const details = await Promise.all(
     [...candidateIds].slice(0, 8).map((id) =>
-      regional
-        .get<{ info: CandidateInfo }>(`/lol/match/v5/matches/${encodeURIComponent(id)}`)
+      riotGet<{ info: CandidateInfo }>(regional, `/lol/match/v5/matches/${encodeURIComponent(id)}`)
         .then((r) => ({ id, info: r.data.info }))
         .catch(() => null),
     ),
@@ -257,7 +287,8 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
   let resolvedName = cleanName;
   let resolvedTag = cleanTag;
   try {
-    const { data } = await regionalHttp().get<{ puuid: string; gameName: string; tagLine: string }>(
+    const { data } = await riotGet<{ puuid: string; gameName: string; tagLine: string }>(
+      regionalHttp(),
       `/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(cleanName)}/${encodeURIComponent(cleanTag)}`,
     );
     puuid = data.puuid;
@@ -271,7 +302,8 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
   let summonerLevel: number | undefined;
   let profileIconId: number | undefined;
   try {
-    const { data } = await platformHttp().get<{ summonerLevel: number; profileIconId: number }>(
+    const { data } = await riotGet<{ summonerLevel: number; profileIconId: number }>(
+      platformHttp(),
       `/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`,
     );
     summonerLevel = data.summonerLevel;
@@ -283,7 +315,7 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
   // 3) Ranked entries (platform host, by PUUID).
   let rank: RiotRankEntry | null = null;
   try {
-    const { data } = await platformHttp().get<
+    const { data } = await riotGet<
       Array<{
         queueType: string;
         tier: Tier;
@@ -292,7 +324,7 @@ export async function lookupByRiotId(gameName: string, tagLine: string): Promise
         wins: number;
         losses: number;
       }>
-    >(`/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`);
+    >(platformHttp(), `/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`);
 
     const normalized: RiotRankEntry[] = data.map((e) => ({
       queueType: e.queueType,

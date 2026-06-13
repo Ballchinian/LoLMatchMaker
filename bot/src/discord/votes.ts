@@ -29,7 +29,7 @@ export function votesNeededFor(eligibleCount: number): number {
 /*
     matchId:subcommand -> running vote's collector. A match can have several votes
     at once (e.g. a confirm and a cancel), but only one per subcommand. Admins cut
-    through: their direct action stops the matching vote(s) via collector.stop().
+    through: their direct action stops the matching votes via collector.stop().
 */
 const activeVotes = new Map<string, { stop: (reason?: string) => void }>();
 
@@ -54,7 +54,7 @@ export function closeMatchVotes(matchId: string, message: string) {
     }
 }
 
-//One side of a two-option vote (approve/reject, Team A/Team B, ...)
+//One side of a two option vote (approve/reject, Team A/Team B, ...)
 export interface VoteOption {
     id: string;
     label: string;

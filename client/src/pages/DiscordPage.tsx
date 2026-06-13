@@ -104,7 +104,7 @@ function MatchRow({ m, busy, onAction }: {
                     </span>
                 ) : (
                     <button className={btnEmerald} disabled={busy} onClick={() => setConfirmOpen(true)}>
-                        ✅ {ACTION_LABEL.confirm}…
+                        ✔️ {ACTION_LABEL.confirm}…
                     </button>
                 )}
                 <button
