@@ -9,7 +9,7 @@ export type BotCommandAction = 'setup' | 'split' | 'join' | 'cancel' | 'confirm'
 export type BotCommandStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface BotCommandAttrs {
-  //Discord guild this command belongs to; null = legacy single-tenant data
+  //Discord guild this command belongs to; null only in unscoped local dev
   guildId: string | null;
   action: BotCommandAction;
   match: Types.ObjectId;

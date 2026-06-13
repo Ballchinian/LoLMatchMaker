@@ -22,12 +22,6 @@ const envSchema = z.object({
   // if all are blank a random per-boot secret is used (logins die on restart).
   AUTH_SECRET: z.string().optional().default(''),
 
-  // Which Discord guild may adopt the pre-multi-tenant (guildId-less) data on
-  // its first /setup. Blank = first server to register adopts it — fine for a
-  // fresh DB, risky if the bot is invited to strangers' servers before YOUR
-  // /setup. Set it to your guild id to be safe.
-  LEGACY_GUILD_ID: z.string().optional().default(''),
-
   // Riot integration is optional — without a key the app still works with manual entry.
   RIOT_API_KEY: z.string().optional().default(''),
   RIOT_REGION: z.enum(['americas', 'europe', 'asia', 'sea']).default('europe'),

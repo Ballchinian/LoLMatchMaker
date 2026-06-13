@@ -2,8 +2,6 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Server } from '../models/Server';
-import { Player } from '../models/Player';
-import { Match } from '../models/Match';
 import { hashPassword, newServerKey, signServerToken, verifyPassword } from '../services/passwords';
 import { ApiError, asyncHandler } from '../middleware/errors';
 import { requireWriter } from '../middleware/auth';
@@ -19,31 +17,6 @@ const registerSchema = z.object({
   //Omitted on re-register: the existing password is kept
   password: z.string().min(4).max(128).optional(),
 });
-
-/*
-    Adopt legacy single-tenant documents into the FIRST server that registers:
-    sets their guildId and prefixes uniqueKeys so future per-guild keys can't
-    collide with them. A no-op for every later server, and locked to
-    LEGACY_GUILD_ID when set (so a stranger's server can't claim the old data).
-*/
-async function adoptLegacyData(guildId: string): Promise<void> {
-  if (env.LEGACY_GUILD_ID.trim() && env.LEGACY_GUILD_ID.trim() !== guildId) return;
-  const others = await Server.countDocuments({ guildId: { $ne: guildId } }).exec();
-  if (others > 0) return;
-
-  const players = await Player.collection.updateMany({ guildId: { $in: [null, undefined] } }, [
-    { $set: { guildId, uniqueKey: { $concat: [guildId, ':', '$uniqueKey'] } } },
-  ]);
-  const matches = await Match.updateMany(
-    { guildId: { $in: [null, undefined] } },
-    { $set: { guildId } },
-  ).exec();
-  if (players.modifiedCount || matches.modifiedCount) {
-    console.log(
-      `[servers] adopted ${players.modifiedCount} player(s) + ${matches.modifiedCount} match(es) into guild ${guildId}`,
-    );
-  }
-}
 
 /**
  * POST /api/servers/register — the bot's /setup registers (or updates) its guild.
@@ -66,7 +39,6 @@ serversRouter.post(
         serverKey: newServerKey(),
         adminPasswordHash: hashPassword(body.password),
       });
-      await adoptLegacyData(body.guildId);
       res.status(201).json({ serverKey: server.serverKey, created: true });
       return;
     }

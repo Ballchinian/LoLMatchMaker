@@ -18,7 +18,8 @@ import { ApiError, asyncHandler } from './errors';
  * Scope (which server's data a request sees) resolves from, in order: the
  * server token's guild, the bot's X-Guild-Id header, or a public visitor's
  * X-Server-Key header (the unguessable key shared in the Discord info channel).
- * No scope at all = the legacy tenant (documents without a guildId).
+ * No scope at all sees nothing: every document carries its server's guildId
+ * (a null scope only ever matches unscoped local-dev data).
  */
 
 export type Actor = 'admin' | 'bot';
@@ -127,7 +128,7 @@ export const resolveScope = asyncHandler(async (req, _res, next) => {
     return;
   }
 
-  //No scope: legacy single-tenant documents (no guildId field)
+  //No scope: matches only guildId-less documents (i.e. unscoped local dev)
   req.guildId = null;
   next();
 });

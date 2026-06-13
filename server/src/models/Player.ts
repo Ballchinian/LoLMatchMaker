@@ -37,7 +37,7 @@ interface RecentSnapshot {
 
 export interface PlayerAttrs {
   source: PlayerSource;
-  //Discord guild (server) this player belongs to; null = legacy single-tenant data
+  //Discord guild (server) this player belongs to; null only in unscoped local dev
   guildId?: string | null;
   uniqueKey: string;
   displayName: string;

@@ -26,7 +26,7 @@ export interface RosterEntry {
 
 export interface MatchAttrs {
   status: MatchStatus;
-  //Discord guild (server) this match belongs to; null = legacy single-tenant data
+  //Discord guild (server) this match belongs to; null only in unscoped local dev
   guildId?: string | null;
   //Two word lobby name; absent on old matches
   name?: string;
