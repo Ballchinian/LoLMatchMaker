@@ -63,10 +63,9 @@ export const CHAMP_POOL_MODIFIER: Record<ChampPool, number> = {
   diverse: 0, //can't be banned out
 };
 
-//Champion-pool modifier (-200 .. 0). 'limited' is the pre-rename value for two-trick.
+//Champion-pool modifier (-200 .. 0). Unknown/absent values fall back to 'diverse' (no penalty).
 export function versatilityModifier(champPool: string | undefined | null): number {
-  const pool: ChampPool =
-    champPool === 'limited' ? 'two-trick' : CHAMP_POOLS.includes(champPool as ChampPool) ? (champPool as ChampPool) : 'diverse';
+  const pool: ChampPool = CHAMP_POOLS.includes(champPool as ChampPool) ? (champPool as ChampPool) : 'diverse';
   return CHAMP_POOL_MODIFIER[pool];
 }
 

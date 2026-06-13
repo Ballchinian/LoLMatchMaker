@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   apiErrorMessage,
@@ -19,21 +19,9 @@ import { DeletePlayer, PlayerReset, ServerReset } from '../components/ResetContr
 import { TagFilterBar } from '../components/TagFilterBar';
 import { collectTags, matchesTagFilter } from '../lib/tags';
 import { usePrivileged } from '../lib/usePrivileged';
-
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-const inputCls =
-  'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500';
-const btnPrimary =
-  'rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50';
-const btnGhost =
-  'rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
+import { Card, btnGhost, btnPrimary, inputCls } from '../components/ui';
+import { PlayerHistoryModal } from '../components/PlayerHistoryModal';
+import type { Player } from '../api/types';
 
 /* ----------------------------- Riot search ----------------------------- */
 
@@ -259,6 +247,9 @@ function Roster() {
   });
   const privileged = usePrivileged();
   const [filter, setFilter] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
+  //Roster row whose match history is open in a modal.
+  const [profile, setProfile] = useState<Player | null>(null);
 
   const toggleFilter = (key: string) =>
     setFilter((prev) => {
@@ -267,10 +258,12 @@ function Roster() {
       return next;
     });
 
-  const visible = useMemo(
-    () => (players ?? []).filter((p) => matchesTagFilter(p, filter)),
-    [players, filter],
-  );
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return (players ?? []).filter(
+      (p) => matchesTagFilter(p, filter) && (!q || p.displayName.toLowerCase().includes(q)),
+    );
+  }, [players, filter, search]);
 
   if (isLoading) return <Card>Loading roster…</Card>;
   if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
@@ -278,12 +271,20 @@ function Roster() {
     return <Card><span className="text-slate-400">No players yet. Search Riot or add one manually.</span></Card>;
 
   return (
+    <>
+    {profile && <PlayerHistoryModal player={profile} onClose={() => setProfile(null)} />}
     <Card className="overflow-hidden p-0">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 px-5 py-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
           Roster ({visible.length}
           {visible.length !== players.length ? ` / ${players.length}` : ''})
         </h3>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name…"
+          className="w-40 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-500"
+        />
         <TagFilterBar players={players} selected={filter} onToggle={toggleFilter} onClear={() => setFilter(new Set())} />
       </div>
       <div className="divide-y divide-slate-800">
@@ -292,9 +293,17 @@ function Roster() {
             <div className="flex items-center gap-4">
               <span className="w-6 text-center text-sm text-slate-500">{i + 1}</span>
               <div className="flex-1">
-                <p className="font-medium text-white">{p.displayName}</p>
+                <button
+                  type="button"
+                  onClick={() => setProfile(p)}
+                  className="font-medium text-white hover:text-indigo-300"
+                  title="View match history"
+                >
+                  {p.displayName}
+                </button>
                 <p className="text-xs text-slate-500">
-                  {p.source === 'riot' ? p.region.toUpperCase() : 'manual'} · {p.wins}W {p.losses}L · {p.gamesPlayed} games
+                  {p.source === 'riot' ? p.region.toUpperCase() : 'manual'} · {p.wins}W {p.losses}L
+                  {p.gamesPlayed > 0 && ` · ${Math.round((p.wins / p.gamesPlayed) * 100)}% WR`} · {p.gamesPlayed} games
                 </p>
               </div>
               <RankBadge rank={p.rank} size="sm" />
@@ -302,6 +311,8 @@ function Roster() {
                 <p className="text-xs text-slate-500">MMR</p>
                 {/* Users see the adjusted MMR; the rank badge stays on raw MMR. */}
                 <p className="font-bold text-indigo-300">{p.effectiveMmr}</p>
+                {/* RD = how settled the rating is (±). High RD = still calibrating. */}
+                <p className="text-[11px] text-slate-500" title="Rating uncertainty (±): lower = more settled">±{p.rd}</p>
               </div>
             </div>
             <div className="mt-2 space-y-1 pl-10">
@@ -323,6 +334,7 @@ function Roster() {
         )}
       </div>
     </Card>
+    </>
   );
 }
 

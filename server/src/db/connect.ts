@@ -3,13 +3,15 @@ import { env } from '../config/env';
 import { Player } from '../models/Player';
 import { Server } from '../models/Server';
 import { BotCommand } from '../models/BotCommand';
+import { Match } from '../models/Match';
 
 let connected = false;
 
 /*
     Sync indexes for collections that changed shape: the Player discordUserId
     index went from GLOBAL-unique to per-guild compound, Server gained
-    lastActiveAt, and BotCommand gained a TTL index. syncIndexes drops indexes
+    lastActiveAt, BotCommand gained a TTL index, and Match's two single-field
+    indexes (guildId, status) were replaced by one compound {guildId, status}. syncIndexes drops indexes
     the schema no longer declares and builds new ones. Best effort: a failure
     here must not stop the boot.
 */
@@ -18,6 +20,7 @@ async function migrateIndexes(): Promise<void> {
     ['player', Player],
     ['server', Server],
     ['botCommand', BotCommand],
+    ['match', Match],
   ] as const) {
     try {
       const dropped = await model.syncIndexes();

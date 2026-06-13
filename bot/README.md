@@ -48,7 +48,7 @@ buried; each vote opens a thread ("match chat") where members CAN talk, locked w
 | `/link player:<name> champs:<pool>` | anyone | link your Discord account (answering the champion pool question) → unlocks the server + assigns your rank role |
 | `/update champs:<pool>` | anyone | change your champion pool answer later |
 | `/unlink` | anyone | unlink your own account (linked the wrong one?); admins can pass `player:` to unlink anyone |
-| `/setup [password] [rotate_key]` | admin (password change + key rotation: **owner only**) | register the server with the backend (first run needs `password`), create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (website + key + signup + lifecycle + command guide), and the Lobby voice channel. `rotate_key:true` issues a fresh server key |
+| `/setup [password] [rotate_key]` | the **server owner** for the first setup / password change / key rotation; any admin for a plain repair re-run | register the server with the backend (the owner's first run needs `password` — it becomes the website admin login), create the Match Admin + Linked roles, 10 rank roles, the commands channel, a read-only info channel (one-click website link + signup + lifecycle + command guide), and the Lobby voice channel. `rotate_key:true` issues a fresh server key |
 | `/syncroles` | admin | re-sync every linked member's rank role from the website |
 | `/match setup match:<pending>` | admin (non-admins trigger a lobby-majority 👍/👎 vote) | create the channels and send players straight to their team channels |
 | `/match split match:<pending>` | admin | move players (back) into their team channels |
@@ -65,11 +65,13 @@ New members should only see the **commands channel** until they link, then get a
 matching their website rank (Iron … Challenger) that stays in sync.
 
 One-time setup:
-1. Run **`/setup`** — creates the `Match Admin` role (give it to your admins; holders can run
-   admin commands without "Manage Server"), the `Linked` role (with View Channels), the 10 tier
-   roles, the commands channel visible to everyone (slash-commands-only: typing is
-   blocked/auto-deleted), and a read-only `#info` channel where the bot posts the website link,
-   signup steps, and the command guide (re-running `/setup` refreshes that post).
+1. The **server owner** runs **`/setup password:<website admin password>`** — that password
+   becomes the server's website admin login (owner-only). It creates the `Match Admin` role
+   (give it to your admins; holders can run admin commands without "Manage Server"), the `Linked`
+   role (with View Channels), the 10 tier roles, the commands channel visible to everyone
+   (slash-commands-only: typing is blocked/auto-deleted), and a read-only `#info` channel where
+   the bot posts the one-click website link, signup steps, and the command guide. Any admin can
+   re-run `/setup` (no password) later to repair roles/channels and refresh that post.
 2. In **Server Settings → Roles → @everyone**, turn **OFF** "View Channels".
 3. Make sure the **bot's own role sits ABOVE all the rank roles** (Server Settings → Roles)
    so it can assign them.

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     apiErrorMessage,
@@ -8,18 +8,13 @@ import {
 } from '../api/client';
 import type { BotCommandRecord, MatchRecord } from '../api/types';
 import { usePrivileged } from '../lib/usePrivileged';
+import { Card } from '../components/ui';
 
 /*
     Admin-only remote control for the Discord bot: every /match action as a
     button. Clicks are queued on the backend; the bot (polling every few
     seconds) executes them in the Discord server and reports back here.
 */
-
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-    return (
-        <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
-    );
-}
 
 const btn =
     'rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-40 disabled:cursor-not-allowed';
@@ -174,14 +169,21 @@ export default function DiscordPage() {
         onSuccess: (cmd) => {
             setNotice(`Queued ${ACTION_LABEL[cmd.action]} for ${cmd.matchLabel} — the bot picks it up within ~5s.`);
             qc.invalidateQueries({ queryKey: ['bot-commands'] });
-            //Match states change once the bot acts; refresh shortly after
-            setTimeout(() => {
-                qc.invalidateQueries({ queryKey: ['matches'] });
-                qc.invalidateQueries({ queryKey: ['players'] });
-            }, 6_000);
         },
         onError: (err) => setNotice(apiErrorMessage(err)),
     });
+
+    //The bot mutates matches/players in Discord; refresh those views the moment a
+    //queued/running command actually finishes (not on a fixed guess-delay).
+    const prevActive = useRef(0);
+    useEffect(() => {
+        const active = (commands ?? []).filter((c) => c.status === 'queued' || c.status === 'running').length;
+        if (active < prevActive.current) {
+            qc.invalidateQueries({ queryKey: ['matches'] });
+            qc.invalidateQueries({ queryKey: ['players'] });
+        }
+        prevActive.current = active;
+    }, [commands, qc]);
 
     if (!privileged) {
         return (

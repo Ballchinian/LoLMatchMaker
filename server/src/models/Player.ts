@@ -175,7 +175,7 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     // Versatility (mutable; set at /link signup or via /update / the admin UI).
     // Champ pool adjusts displayed/balancing MMR (one-trick -200, two-trick -75,
     // diverse 0). Raw mmr drives ranks and Glicko.
-    champPool: { type: String, enum: [...CHAMP_POOLS, 'limited'], default: 'diverse' },
+    champPool: { type: String, enum: CHAMP_POOLS, default: 'diverse' },
 
     // Discord link (one Discord account ↔ one player PER SERVER). Mutable.
     discordUserId: { type: String },
@@ -218,7 +218,7 @@ playerSchema.methods.toPublic = function toPublic(this: PlayerDoc): PublicPlayer
     losses: this.losses,
     gamesPlayed: this.gamesPlayed,
     tags: this.tags ?? [],
-    champPool: (this.champPool as string) === 'limited' ? 'two-trick' : (this.champPool ?? 'diverse'),
+    champPool: this.champPool ?? 'diverse',
     mmrModifier: versatilityModifier(this.champPool),
     effectiveMmr: effectiveMMR(this.mmr, this.champPool),
     discordUserId: this.discordUserId,

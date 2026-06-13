@@ -7,6 +7,7 @@ import { TagFilterBar } from '../components/TagFilterBar';
 import { matchesTagFilter } from '../lib/tags';
 import { useSelection, type ConstraintType } from '../store/useSelection';
 import { usePrivileged } from '../lib/usePrivileged';
+import { Card, btnGhost, btnPrimary, inputCls as selectCls } from '../components/ui';
 
 type Side = 'a' | 'b' | 'bench';
 interface Assignment {
@@ -22,19 +23,6 @@ interface DragState {
   over: Side | null;
 }
 
-const btnPrimary =
-  'rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-400 disabled:opacity-50';
-const btnGhost =
-  'rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
-const selectCls =
-  'rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500';
-
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
-  );
-}
-
 /** The adjusted MMR — what users see everywhere (the modifier itself is hidden). */
 function Value({ player }: { player: Player }) {
   return <span className="w-12 text-right font-semibold text-indigo-300">{player.effectiveMmr}</span>;
@@ -45,6 +33,7 @@ function Value({ player }: { player: Player }) {
 function PlayerPicker({ players }: { players: Player[] }) {
   const { selectedIds, toggle, selectMany, clear } = useSelection();
   const [filter, setFilter] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState('');
 
   const toggleFilter = (key: string) =>
     setFilter((prev) => {
@@ -53,7 +42,12 @@ function PlayerPicker({ players }: { players: Player[] }) {
       return next;
     });
 
-  const visible = useMemo(() => players.filter((p) => matchesTagFilter(p, filter)), [players, filter]);
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return players.filter(
+      (p) => matchesTagFilter(p, filter) && (!q || p.displayName.toLowerCase().includes(q)),
+    );
+  }, [players, filter, search]);
 
   return (
     <Card className="p-0">
@@ -77,6 +71,12 @@ function PlayerPicker({ players }: { players: Player[] }) {
             )}
           </div>
         </div>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search name…"
+          className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-500"
+        />
         <TagFilterBar players={players} selected={filter} onToggle={toggleFilter} onClear={() => setFilter(new Set())} />
       </div>
       <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-800">
@@ -617,10 +617,22 @@ export default function TeamBuilderPage() {
               <div className="mt-4 border-t border-slate-800 pt-4">
                 <p className="mb-2 text-xs uppercase tracking-wide text-slate-400">Record result</p>
                 <div className="flex flex-wrap items-center gap-2">
-                  <button className={btnGhost} disabled={!teamsReady || save.isPending} onClick={() => save.mutate({ winner: 'A' })}>
+                  <button
+                    className={btnGhost}
+                    disabled={!teamsReady || save.isPending}
+                    onClick={() => {
+                      if (window.confirm('Record Team A as the winner? MMR is applied immediately (reversible from the Matches tab).')) save.mutate({ winner: 'A' });
+                    }}
+                  >
                     Team A won
                   </button>
-                  <button className={btnGhost} disabled={!teamsReady || save.isPending} onClick={() => save.mutate({ winner: 'B' })}>
+                  <button
+                    className={btnGhost}
+                    disabled={!teamsReady || save.isPending}
+                    onClick={() => {
+                      if (window.confirm('Record Team B as the winner? MMR is applied immediately (reversible from the Matches tab).')) save.mutate({ winner: 'B' });
+                    }}
+                  >
                     Team B won
                   </button>
                   <span className="text-slate-600">·</span>
@@ -652,6 +664,13 @@ export default function TeamBuilderPage() {
                       </option>
                     ))}
                   </select>
+                  <span className="text-xs text-slate-500">Reported by:</span>
+                  <input
+                    className={`${selectCls} w-40`}
+                    value={reportedBy}
+                    onChange={(e) => setReportedBy(e.target.value)}
+                    placeholder="your name (optional)"
+                  />
                   <span className="text-xs text-slate-500">Winner you claim:</span>
                   <select className={selectCls} value={proposed} onChange={(e) => setProposed(e.target.value as 'A' | 'B' | '')}>
                     <option value="">Undecided (not played yet)</option>

@@ -413,33 +413,12 @@ async function performReset(player: PlayerDoc): Promise<{ before: ResetView; aft
   return { before, after: resetView(fresh), refreshedFromRiot };
 }
 
-/**
- * POST /api/players/reset-all — SERVER RESET: reset every player on this
- * server (riot refresh + re-seed + zeroed record). Links stay. Admin/bot.
- * Returns per-player before/after so the caller can show what changed.
- */
-playersRouter.post(
-  '/reset-all',
-  requireWriter,
-  asyncHandler(async (req, res) => {
-    const players = await Player.find(guildFilter(req)).sort({ mmr: -1 }).exec();
-    const results: Array<{ id: string; displayName: string; before?: ResetView; after?: ResetView; error?: string }> = [];
-    //Sequential on purpose: Riot dev keys rate-limit hard
-    for (const p of players) {
-      try {
-        const { before, after } = await performReset(p);
-        results.push({ id: p._id.toString(), displayName: p.displayName, before, after });
-      } catch (err) {
-        results.push({ id: p._id.toString(), displayName: p.displayName, error: (err as Error).message });
-      }
-    }
-    res.json({
-      results,
-      reset: results.filter((r) => !r.error).length,
-      failed: results.filter((r) => r.error).length,
-    });
-  }),
-);
+/*
+    Server reset (resetting EVERY player) is driven CLIENT-side, one call to
+    /:id/reset per player: that lets the website show live progress, pace the
+    Riot calls (dev keys rate-limit hard — the lookup throws 429), and offer a
+    Cancel button mid-run. So there's deliberately no bulk reset-all route.
+*/
 
 /** POST /api/players/:id/reset — PLAYER RESET: one player, same semantics. Admin/bot. */
 playersRouter.post(

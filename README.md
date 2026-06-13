@@ -46,9 +46,10 @@ bot commands all carry the server's guild id and are never shared between server
   (posted in the #info channel as a one-click link `https://<site>/s/<key>`). Opening the link
   scopes the site to that server and then strips the key from the URL (it's kept in
   localStorage and sent as `X-Server-Key`); the key can also be pasted manually.
-- The **admin password** (scrypt-hashed in MongoDB) is exchanged at login for a signed,
-  expiring, **version-stamped** token that unlocks admin actions for that server only.
-  Rotating the password (owner-only) bumps the version and logs out old sessions.
+- The **admin password** (scrypt-hashed in MongoDB) is set by the **guild owner** on the first
+  `/setup`, and exchanged at login for a signed, expiring, **version-stamped** token that unlocks
+  admin actions for that server only. Setting or changing the password is owner-only; changing it
+  bumps the version and logs out old sessions.
 - The **server key** can be rotated (owner-only, `/setup rotate_key:true`) to cut off anyone
   who still has the old one.
 - All data requests resolve their scope from the token / the bot's `X-Guild-Id` header /
@@ -66,7 +67,8 @@ bot commands all carry the server's guild id and are never shared between server
 ## Authentication & servers
 - `GET /api/auth/me` 🔒 — Validate a token and return the actor role (+ server, if scoped)
 - `POST /api/servers/register` 🔒 — (bot/global only) Register/update a Discord server; returns
-  its key. Password change + key rotation are owner-only (enforced via the invoker).
+  its key. Setting the password (first setup included), changing it, and key rotation are all
+  owner-only (enforced by comparing the bot-reported invoker against the guild owner).
 - `POST /api/servers/login` — Server key + admin password → per-server admin token (rate
   limited + per-key lockout after repeated failures)
 - `GET /api/servers/lookup?key=` — Resolve a server key to its server name
@@ -79,8 +81,9 @@ bot commands all carry the server's guild id and are never shared between server
 - `PATCH /api/players/:id/tags` 🔒 — Replace a player's tags
 - `PATCH /api/players/:id/mmr` 🔒 — Admin override of seed MMR, current MMR and/or RD
 - `PATCH /api/players/:id/roles` 🔒 — Set champion-pool depth (the versatility MMR modifier)
-- `POST /api/players/:id/reset` 🔒 — Reset one player (riot refresh, re-seed, zero record)
-- `POST /api/players/reset-all` 🔒 — Server reset: the same for every player
+- `POST /api/players/:id/reset` 🔒 — Reset one player (riot refresh, re-seed, zero record).
+  "Server reset" is the website calling this per player in sequence (paced for Riot limits,
+  cancellable) — there's no bulk endpoint.
 - `DELETE /api/players/:id` 🔒 — Permanently delete a player (blocked while in an open match)
 
 ## Teams

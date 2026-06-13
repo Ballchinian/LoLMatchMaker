@@ -93,11 +93,13 @@ The config files are already here:
 
 - On **Railway**, set `CLIENT_ORIGIN` to your Netlify URL and let it redeploy.
   (Required for Option B; harmless for Option A.)
-- In Discord, run **`/setup password:<website admin password>`** — this registers the server
-  with the backend and posts the **server key** in the #info channel. /setup is idempotent:
-  re-running it reuses existing roles/channels and just refreshes permissions + the info post.
-  There is no migration from pre-multi-tenant data — every server starts with a fresh roster.
-  Changing the password later, or rotating the key with `/setup rotate_key:true`, is **owner-only**.
+- In Discord, the **server owner** runs **`/setup password:<website admin password>`** once — this
+  registers the server with the backend and posts the **server key** (as a one-click link) in the
+  #info channel. Setting the password (this first time), changing it later, and rotating the key
+  with `/setup rotate_key:true` are all **owner-only**. Any other admin can re-run `/setup` with no
+  password to repair roles/channels — /setup is idempotent (it reuses existing roles/channels and
+  refreshes permissions + the info post). There is no migration from pre-multi-tenant data —
+  every server starts with a fresh roster.
 - Open your Netlify site. Top-right **Connect server** → paste the server key (to browse) and
   the admin password (to unlock admin controls, including the Discord tab). The raw
   `ADMIN_TOKEN` still works in the password box as a global site-owner unlock.

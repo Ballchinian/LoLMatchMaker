@@ -186,10 +186,3 @@ export interface ResetView {
     riotRank: string | null;
 }
 
-export interface ResetAllResult {
-    id: string;
-    displayName: string;
-    before?: ResetView;
-    after?: ResetView;
-    error?: string;
-}

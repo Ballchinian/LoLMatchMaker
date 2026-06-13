@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiErrorMessage, deletePlayer, resetAllPlayers, resetPlayer } from '../api/client';
+import { useRef, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { apiErrorMessage, deletePlayer, getPlayers, resetPlayer } from '../api/client';
 import type { Player, ResetView } from '../api/types';
 
 /*
@@ -90,51 +90,110 @@ export function DeletePlayer({ player }: { player: Player }) {
     );
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+//Gap after a Riot-backed reset, to stay clear of the dev key's 2-min window.
+const RIOT_PACE_MS = 1500;
+
 export function ServerReset() {
     const qc = useQueryClient();
+    const { data: players } = useQuery({ queryKey: ['players'], queryFn: getPlayers });
+    const [running, setRunning] = useState(false);
+    const [progress, setProgress] = useState<{ done: number; total: number; current: string } | null>(null);
     const [report, setReport] = useState<string[] | null>(null);
+    //Read synchronously inside the loop; a button click flips it to stop.
+    const cancelRef = useRef(false);
 
-    const reset = useMutation({
-        mutationFn: resetAllPlayers,
-        onSuccess: ({ results, reset: ok, failed }) => {
-            qc.invalidateQueries({ queryKey: ['players'] });
-            const lines = results.map((r) =>
-                r.error
-                    ? `❌ ${r.displayName}: ${r.error}`
-                    : `✔ ${r.displayName}: ${r.before!.mmr} → ${r.after!.mmr} MMR, record zeroed` +
-                        (r.before!.riotRank !== r.after!.riotRank
-                            ? ` (Riot ${r.before!.riotRank ?? 'none'} → ${r.after!.riotRank ?? 'none'})`
+    const run = async () => {
+        const list = players ?? [];
+        if (list.length === 0) return;
+        if (!window.confirm(`Reset ALL ${list.length} players on this server? Each one's MMR/RD is re-seeded and W/L zeroed (Discord links and match history are kept). This cannot be undone.`)) return;
+        if (!window.confirm('Are you really sure? This re-fetches every Riot player one by one and can take a while.')) return;
+
+        cancelRef.current = false;
+        setRunning(true);
+        setReport(null);
+        const lines: string[] = [];
+        let ok = 0;
+        let failed = 0;
+        let processed = 0;
+
+        for (const p of list) {
+            if (cancelRef.current) break;
+            processed += 1;
+            setProgress({ done: processed, total: list.length, current: p.displayName });
+            try {
+                const { before, after, refreshedFromRiot } = await resetPlayer(p.id);
+                ok += 1;
+                lines.push(
+                    `✔ ${after.displayName}: ${before.mmr} → ${after.mmr} MMR, record zeroed` +
+                        (before.riotRank !== after.riotRank
+                            ? ` (Riot ${before.riotRank ?? 'none'} → ${after.riotRank ?? 'none'})`
                             : ''),
-            );
-            setReport([`Server reset done: ${ok} player(s) reset${failed ? `, ${failed} failed` : ''}.`, ...lines]);
-        },
-    });
+                );
+                //Pace only after a real Riot refetch; manual players are instant.
+                if (refreshedFromRiot && processed < list.length && !cancelRef.current) await sleep(RIOT_PACE_MS);
+            } catch (err) {
+                failed += 1;
+                lines.push(`❌ ${p.displayName}: ${apiErrorMessage(err)}`);
+                //A failure is often a 429 — back off a touch before the next one.
+                if (processed < list.length && !cancelRef.current) await sleep(RIOT_PACE_MS);
+            }
+        }
+
+        const cancelled = cancelRef.current;
+        setProgress(null);
+        setRunning(false);
+        cancelRef.current = false;
+        qc.invalidateQueries({ queryKey: ['players'] });
+        const head =
+            `Server reset ${cancelled ? 'cancelled' : 'done'}: ${ok} reset` +
+            (failed ? `, ${failed} failed` : '') +
+            ` (of ${list.length}).` +
+            (cancelled ? ' Remaining players were left unchanged.' : '');
+        setReport([head, ...lines]);
+    };
 
     return (
         <div className="rounded-2xl border border-rose-900/40 bg-rose-950/10 p-5">
             <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-rose-300">Server reset</h3>
             <p className="mb-3 text-xs text-slate-400">
                 Resets EVERY player on this server: refetch Riot details, re-seed MMR/RD, zero the W/L
-                record. Discord links and match history are kept. Riot players are refetched one by one,
-                so this can take a while.
+                record. Discord links and match history are kept. Runs one player at a time and paces the
+                Riot calls to respect the API limit — you can cancel midway (players already done stay reset).
             </p>
-            <button
-                className="rounded-lg border border-rose-800/60 px-4 py-2 text-sm font-medium text-rose-300 transition hover:border-rose-600 disabled:opacity-50"
-                disabled={reset.isPending}
-                onClick={() => {
-                    if (!window.confirm('Reset ALL players on this server? Every player\'s MMR/RD is re-seeded and their record zeroed. This cannot be undone.')) return;
-                    if (!window.confirm('Are you really sure? This affects every player at once.')) return;
-                    setReport(null);
-                    reset.mutate();
-                }}
-            >
-                {reset.isPending ? 'Resetting everyone… (this can take a while)' : '♻️ Reset ALL players'}
-            </button>
-            {reset.isError && <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(reset.error)}</p>}
+
+            {running ? (
+                <div className="flex flex-wrap items-center gap-3">
+                    <span className="text-sm text-amber-300">
+                        Resetting {progress?.done ?? 0}/{progress?.total ?? 0}
+                        {progress?.current ? ` — ${progress.current}` : ''}…
+                    </span>
+                    <button
+                        className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-400"
+                        onClick={() => {
+                            cancelRef.current = true;
+                        }}
+                    >
+                        Cancel
+                    </button>
+                </div>
+            ) : (
+                <button
+                    className="rounded-lg border border-rose-800/60 px-4 py-2 text-sm font-medium text-rose-300 transition hover:border-rose-600 disabled:opacity-50"
+                    disabled={!players || players.length === 0}
+                    onClick={run}
+                >
+                    ♻️ Reset ALL players
+                </button>
+            )}
+
             {report && (
                 <div className="mt-3 max-h-64 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-3">
                     {report.map((line, i) => (
-                        <p key={i} className={`text-xs ${i === 0 ? 'mb-2 font-semibold text-emerald-300' : 'text-slate-300'}`}>
+                        <p
+                            key={i}
+                            className={`text-xs ${i === 0 ? 'mb-2 font-semibold text-emerald-300' : line.startsWith('❌') ? 'text-rose-300' : 'text-slate-300'}`}
+                        >
                             {line}
                         </p>
                     ))}

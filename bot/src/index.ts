@@ -141,8 +141,8 @@ function updatePresence(inProgress: number, proposed: number): void {
         inProgress > 0
             ? `⚔️ ${inProgress} game${inProgress === 1 ? '' : 's'} in progress`
             : proposed > 0
-                ? `📥 ${proposed} match${proposed === 1 ? '' : 'es'} proposed — /match setup`
-                : '🎮 /link to join the inhouse ladder';
+                ? `${proposed} match${proposed === 1 ? '' : 'es'} proposed /match setup`
+                : '/link to join the inhouse ladder';
     if (state === lastPresence) return;
     lastPresence = state;
     client.user?.setPresence({

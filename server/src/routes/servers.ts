@@ -67,10 +67,25 @@ serversRouter.post(
     }
     const body = registerSchema.parse(req.body);
 
-    let server = await Server.findOne({ guildId: body.guildId }).exec();
+    const server = await Server.findOne({ guildId: body.guildId }).exec();
+
+    /*
+        Setting the password (incl. the FIRST time), changing it, or rotating the
+        key are all takeover vectors, so they're owner-only. The current owner is
+        the stored ownerId (preferred), or — on first setup / servers registered
+        before we stored it — the bot-reported current owner.
+    */
+    const wantsSensitiveChange = Boolean(body.password) || Boolean(body.rotateKey);
+    if (wantsSensitiveChange) {
+      const owner = server?.ownerId ?? body.ownerId;
+      if (owner && body.invokerId && body.invokerId !== owner) {
+        throw new ApiError(403, 'Only the server owner can set or change the website password or rotate the server key.');
+      }
+    }
+
     if (!server) {
       if (!body.password) {
-        throw new ApiError(400, 'A website admin password is required to register this server.');
+        throw new ApiError(400, 'A website admin password is required to register this server (owner only).');
       }
       //Hard cap on tenants (0 = unlimited). Reaping happens separately.
       if (env.MAX_SERVERS > 0) {
@@ -79,7 +94,7 @@ serversRouter.post(
           throw new ApiError(503, 'This bot has reached its server limit. Please try again later.');
         }
       }
-      server = await Server.create({
+      const created = await Server.create({
         guildId: body.guildId,
         guildName: body.guildName,
         ownerId: body.ownerId,
@@ -88,22 +103,8 @@ serversRouter.post(
         tokenVersion: 0,
         lastActiveAt: new Date(),
       });
-      res.status(201).json({ serverKey: server.serverKey, created: true });
+      res.status(201).json({ serverKey: created.serverKey, created: true });
       return;
-    }
-
-    /*
-        Changing the password or rotating the key are takeover vectors, so on an
-        existing server only the guild OWNER may do them. The current owner is
-        the stored ownerId (preferred) or, for servers registered before we
-        stored it, the bot-reported current owner.
-    */
-    const wantsSensitiveChange = Boolean(body.password) || Boolean(body.rotateKey);
-    if (wantsSensitiveChange) {
-      const owner = server.ownerId ?? body.ownerId;
-      if (owner && body.invokerId && body.invokerId !== owner) {
-        throw new ApiError(403, 'Only the server owner can change the website password or rotate the server key.');
-      }
     }
 
     server.guildName = body.guildName;

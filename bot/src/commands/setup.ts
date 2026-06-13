@@ -72,7 +72,7 @@ export const setup: Command = {
         .addStringOption((o) =>
         o
             .setName('password')
-            .setDescription('Website admin password (required first time; changing it later is owner-only)')
+            .setDescription('Website admin password — owner only (set on first setup, same option to change it)')
             .setRequired(false)
             .setMinLength(4)
             .setMaxLength(128),
@@ -98,19 +98,14 @@ export const setup: Command = {
 
         /*
             Register this guild with the backend FIRST: it partitions all data
-            per server and hands back the website server key. First run requires
-            a password; later runs may change it or rotate the key, but BOTH of
-            those are takeover vectors, so they're restricted to the guild owner.
+            per server and hands back the website server key. The first setup
+            requires a password, and setting/changing the password or rotating
+            the key are takeover vectors, so they're ALL restricted to the guild
+            owner (enforced backend-side via the invoker/owner ids we pass).
         */
         const password = interaction.options.getString('password') ?? undefined;
         const rotateKey = interaction.options.getBoolean('rotate_key') ?? false;
 
-        /*
-            The backend enforces that, on an ALREADY-registered server, only the
-            guild owner may change the password or rotate the key (it compares
-            the invoker we pass against the current owner). First-time setup is
-            open to any admin. Passing invokerId + ownerId keeps that authoritative.
-        */
         let serverKey: string;
         let serverCreated: boolean;
         let rotatedKey = false;
@@ -128,8 +123,8 @@ export const setup: Command = {
         } catch (err) {
             await interaction.editReply(
                 `❌ Couldn't register this server with the backend: ${(err as Error).message}\n` +
-                `First time here? Run \`/setup password:<website admin password>\` — it becomes this server's admin login on the website. ` +
-                `Changing the password or rotating the key later is owner-only.`,
+                `The **server owner** must run \`/setup password:<website admin password>\` once — that becomes this server's website admin login. ` +
+                `Other admins can re-run \`/setup\` (no password) any time to repair roles/channels.`,
             );
             return;
         }

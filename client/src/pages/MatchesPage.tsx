@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     apiErrorMessage,
@@ -11,14 +10,10 @@ import {
 } from '../api/client';
 import type { MatchRecord, RosterEntry } from '../api/types';
 import { usePrivileged } from '../lib/usePrivileged';
+import { Card } from '../components/ui';
 
+//Compact button variant (smaller than the shared btnGhost) — Matches packs many per card.
 const btnGhost = 'rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
-
-function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
-    return (
-        <div className={`rounded-2xl border border-slate-800 bg-slate-900/50 p-5 ${className}`}>{children}</div>
-    );
-}
 
 /** A team's roster. Shows before→after + delta once confirmed, else the MMR at creation. */
 function TeamSide({ team, label, highlight }: { team: RosterEntry[]; label: string; highlight: string }) {
@@ -119,10 +114,22 @@ function PendingCard({ m }: { m: MatchRecord }) {
         {privileged ? (
             <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className="text-xs uppercase tracking-wide text-slate-400">Who won?</span>
-            <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('A')}>
+            <button
+                className={btnGhost}
+                disabled={confirm.isPending}
+                onClick={() => {
+                    if (window.confirm('Confirm Team A won? MMR is applied immediately (you can reverse it later).')) confirm.mutate('A');
+                }}
+            >
                 Team A
             </button>
-            <button className={btnGhost} disabled={confirm.isPending} onClick={() => confirm.mutate('B')}>
+            <button
+                className={btnGhost}
+                disabled={confirm.isPending}
+                onClick={() => {
+                    if (window.confirm('Confirm Team B won? MMR is applied immediately (you can reverse it later).')) confirm.mutate('B');
+                }}
+            >
                 Team B
             </button>
             {/* Terminology: "Cancel" returns an ACTIVE game to proposed; "Delete" removes a match. */}
@@ -256,7 +263,16 @@ function HistoryCard({ m }: { m: MatchRecord }) {
 }
 
 export default function MatchesPage() {
-    const { data, isLoading, isError, error } = useQuery({ queryKey: ['matches'], queryFn: getMatches });
+    const { data, isLoading, isError, error } = useQuery({
+        queryKey: ['matches'],
+        queryFn: getMatches,
+        //Open games change state on Discord (in-progress, confirmed); poll so the
+        //page tracks them live instead of going stale until a manual reload.
+        refetchInterval: (q) =>
+            (q.state.data ?? []).some((m) => m.status === 'pending' || m.status === 'inProgress')
+                ? 5_000
+                : false,
+    });
 
     if (isLoading) return <Card>Loading match history…</Card>;
     if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
@@ -270,6 +286,16 @@ export default function MatchesPage() {
     //Open = pending (awaiting result) + inProgress (being played on Discord)
     const open = data.filter((m) => m.status === 'pending' || m.status === 'inProgress');
     const history = data.filter((m) => m.status === 'confirmed' || m.status === 'reversed');
+    //"View the last match": the most recently CONFIRMED game (by confirm time,
+    //not creation), surfaced on its own above the rest of the history.
+    const latest = history
+        .filter((m) => m.status === 'confirmed')
+        .sort(
+            (a, b) =>
+                new Date(b.confirmedAt ?? b.createdAt).getTime() -
+                new Date(a.confirmedAt ?? a.createdAt).getTime(),
+        )[0];
+    const rest = history.filter((m) => m._id !== latest?._id);
 
     return (
         <div className="space-y-6">
@@ -284,14 +310,25 @@ export default function MatchesPage() {
             </section>
         )}
 
+        {latest && (
+            <section className="space-y-4">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-emerald-400">
+                Latest result
+            </h2>
+            <div className="rounded-2xl ring-1 ring-emerald-700/40">
+                <HistoryCard m={latest} />
+            </div>
+            </section>
+        )}
+
         <section className="space-y-4">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-            History ({history.length})
+            History ({rest.length})
             </h2>
-            {history.length === 0 ? (
-            <Card><span className="text-slate-500">No confirmed games yet.</span></Card>
+            {rest.length === 0 ? (
+            <Card><span className="text-slate-500">{latest ? 'No earlier games.' : 'No confirmed games yet.'}</span></Card>
             ) : (
-            history.map((m) => <HistoryCard key={m._id} m={m} />)
+            rest.map((m) => <HistoryCard key={m._id} m={m} />)
             )}
         </section>
         </div>

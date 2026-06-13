@@ -89,8 +89,8 @@ const rosterEntrySchema = new Schema<RosterEntry>(
 
 const matchSchema = new Schema<MatchAttrs, MatchModel>(
   {
-    status: { type: String, enum: ['pending', 'inProgress', 'confirmed', 'reversed'], required: true, default: 'pending', index: true },
-    guildId: { type: String, default: null, index: true },
+    status: { type: String, enum: ['pending', 'inProgress', 'confirmed', 'reversed'], required: true, default: 'pending' },
+    guildId: { type: String, default: null },
     name: { type: String },
     teamA: { type: [rosterEntrySchema], required: true },
     teamB: { type: [rosterEntrySchema], required: true },
@@ -113,6 +113,11 @@ const matchSchema = new Schema<MatchAttrs, MatchModel>(
   },
   { timestamps: true },
 );
+
+// Every hot query filters by guild AND status (list, pending count, the
+// one-active-game clash check, open-match lookups), so a single compound index
+// serves them — and its guildId prefix still covers guild-only scans.
+matchSchema.index({ guildId: 1, status: 1 });
 
 export const Match: MatchModel =
   (globalThis as any).__MatchModel ?? model<MatchAttrs, MatchModel>('Match', matchSchema);

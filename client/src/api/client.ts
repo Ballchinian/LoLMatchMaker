@@ -7,7 +7,6 @@ import type {
     HealthInfo,
     MatchRecord,
     Player,
-    ResetAllResult,
     ResetView,
     SearchResult,
     Tier,
@@ -281,16 +280,6 @@ export async function resetPlayer(
         after: ResetView;
         refreshedFromRiot: boolean;
     }>(`/players/${id}/reset`, {}, { timeout: 60_000 });
-    return data;
-}
-
-/** Admin: reset EVERY player on this server (slow — sequential Riot refetches). */
-export async function resetAllPlayers(): Promise<{ results: ResetAllResult[]; reset: number; failed: number }> {
-    const { data } = await api.post<{ results: ResetAllResult[]; reset: number; failed: number }>(
-        '/players/reset-all',
-        {},
-        { timeout: 300_000 },
-    );
     return data;
 }
 
