@@ -12,7 +12,13 @@
    The bot can only hand out channel permissions it holds itself, so /setup FAILS without all of these.
    Open the generated URL and add it to your server. (Already invited with fewer perms? No
    re-invite needed: Server Settings → Roles → the bot's role → enable the missing ones.)
-5. Copy your **server id** (enable Developer Mode → right-click server → Copy ID) into `DISCORD_GUILD_ID`.
+5. *(recommended)* **General Information** → set **Terms of Service URL** to
+   `https://lolmatchmaker.netlify.app/terms` and **Privacy Policy URL** to
+   `https://lolmatchmaker.netlify.app/privacy` — both pages are served by the website.
+   They show on the bot's profile and are required if you ever apply for verification.
+6. `DISCORD_GUILD_ID` is **optional**: the bot auto-registers its commands on every server
+   it's invited to (and when it joins a new one). Set it only for the standalone
+   `npm run register` script.
 
 Channels and roles need no manual creation — `/setup` makes them all, including the **Lobby** voice channel.
 
@@ -87,7 +93,7 @@ The bot is a **worker** (connects out to Discord) — no port, domain, or health
 1. Railway → your project → **New → GitHub Repo** → same repo.
 2. Service **Settings → Root Directory** = `bot`. (Build/start come from `bot/railway.json`.)
 3. **Variables** — add everything from `.env.example`:
-   - `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID`
+   - `DISCORD_TOKEN`, `DISCORD_CLIENT_ID` (`DISCORD_GUILD_ID` no longer needed)
    - `BOT_TOKEN` — **must match** the backend service's `BOT_TOKEN`
    - `API_BASE_URL` — your backend's public URL **incl. `/api`**, e.g. `https://your-app.up.railway.app/api`
    - optional `ADMIN_ROLE_NAME`, `LOBBY_CHANNEL_NAME`, `INHOUSE_CATEGORY` (all have defaults)

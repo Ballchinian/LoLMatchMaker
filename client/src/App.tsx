@@ -8,6 +8,7 @@ import PlayersPage from './pages/PlayersPage';
 import TeamBuilderPage from './pages/TeamBuilderPage';
 import MatchesPage from './pages/MatchesPage';
 import DiscordPage from './pages/DiscordPage';
+import { PrivacyPage, TermsPage } from './pages/LegalPages';
 
 function HealthPill() {
     const { data } = useQuery({ queryKey: ['health'], queryFn: getHealth, staleTime: 30_000 });
@@ -74,9 +75,20 @@ export default function App() {
             <Route path="/build" element={<TeamBuilderPage />} />
             <Route path="/matches" element={<MatchesPage />} />
             <Route path="/discord" element={<DiscordPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
             <Route path="*" element={<Navigate to="/players" replace />} />
             </Routes>
         </main>
+
+        {/* Discord's dev portal links to these; Riot requires the disclaimer. */}
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/60 py-4 text-xs text-slate-600">
+            <span>LoL Match Maker isn't endorsed by Riot Games. League of Legends © Riot Games, Inc.</span>
+            <span className="flex gap-4">
+            <NavLink to="/terms" className="hover:text-slate-400">Terms of Service</NavLink>
+            <NavLink to="/privacy" className="hover:text-slate-400">Privacy Policy</NavLink>
+            </span>
+        </footer>
         </div>
     );
 }

@@ -23,9 +23,11 @@ const registerSchema = z.object({
 /*
     Adopt legacy single-tenant documents into the FIRST server that registers:
     sets their guildId and prefixes uniqueKeys so future per-guild keys can't
-    collide with them. A no-op for every later server.
+    collide with them. A no-op for every later server, and locked to
+    LEGACY_GUILD_ID when set (so a stranger's server can't claim the old data).
 */
 async function adoptLegacyData(guildId: string): Promise<void> {
+  if (env.LEGACY_GUILD_ID.trim() && env.LEGACY_GUILD_ID.trim() !== guildId) return;
   const others = await Server.countDocuments({ guildId: { $ne: guildId } }).exec();
   if (others > 0) return;
 

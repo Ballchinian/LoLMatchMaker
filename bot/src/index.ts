@@ -1,4 +1,4 @@
-import { ChannelType, Client, Events, GatewayIntentBits, MessageFlags, type Guild } from 'discord.js';
+import { ActivityType, ChannelType, Client, Events, GatewayIntentBits, MessageFlags, type Guild } from 'discord.js';
 import { config } from './config';
 import { commandMap } from './commands/index';
 import { registerCommandsForGuild, registerCommandsForGuilds } from './discord/registerCommands';
@@ -120,6 +120,30 @@ async function sweepOrphanedThreads(guild: Guild, activeLabels: Set<string>): Pr
     }
 }
 
+/*
+    Live status under the bot's name ("rich presence"): the game-SDK rich
+    presence (party size, join secrets, ...) only exists for desktop apps
+    running on a player's machine — a bot instead gets ONE activity line, so
+    make it earn its keep by showing the real ladder state across all servers.
+    Updated after every sweep; skipped when unchanged (presence is rate limited).
+*/
+let lastPresence = '';
+function updatePresence(inProgress: number, proposed: number): void {
+    const state =
+        inProgress > 0
+            ? `⚔️ ${inProgress} game${inProgress === 1 ? '' : 's'} in progress`
+            : proposed > 0
+                ? `📥 ${proposed} match${proposed === 1 ? '' : 'es'} proposed — /match setup`
+                : '🎮 /link to join the inhouse ladder';
+    if (state === lastPresence) return;
+    lastPresence = state;
+    client.user?.setPresence({
+        status: 'online',
+        //Custom type shows the text verbatim (no "Playing"/"Watching" prefix)
+        activities: [{ type: ActivityType.Custom, name: 'status', state }],
+    });
+}
+
 /**
  * The webpage can cancel/confirm/delete a match the bot set channels up for,
  * and the bot never hears about it — so periodically reconcile, per guild:
@@ -127,6 +151,8 @@ async function sweepOrphanedThreads(guild: Guild, activeLabels: Set<string>): Pr
  * channels/threads whose match is no longer in progress.
  */
 async function sweepAllGuilds(): Promise<void> {
+    let totalInProgress = 0;
+    let totalProposed = 0;
     for (const guild of client.guilds.cache.values()) {
         let matches: ApiMatch[];
         try {
@@ -145,10 +171,13 @@ async function sweepAllGuilds(): Promise<void> {
             if (removed > 0) {
                 console.log(`[sweep] removed ${removed} channel(s) for non-active matches in ${guild.name}`);
             }
+            totalInProgress += active.size;
+            totalProposed += matches.filter((m) => m.status === 'pending').length;
         } catch (err) {
             console.error('[sweep]', err);
         }
     }
+    updatePresence(totalInProgress, totalProposed);
 }
 
 /*
@@ -199,6 +228,10 @@ client.once(Events.ClientReady, async (c) => {
     } catch (err) {
         console.error('[bot] command registration failed:', err);
     }
+    //Idle status until the first sweep reports real numbers
+    updatePresence(0, 0);
+    //Run a sweep right away (primes announcements + sets an accurate presence)
+    void sweepAllGuilds();
     setInterval(sweepAllGuilds, SWEEP_INTERVAL_MS);
     setInterval(() => void pollCommandQueue(), QUEUE_POLL_INTERVAL_MS);
 });
