@@ -8,6 +8,7 @@ import PlayersPage from './pages/PlayersPage';
 import TeamBuilderPage from './pages/TeamBuilderPage';
 import MatchesPage from './pages/MatchesPage';
 import DiscordPage from './pages/DiscordPage';
+import ServerLink from './pages/ServerLink';
 import { PrivacyPage, TermsPage } from './pages/LegalPages';
 
 function HealthPill() {
@@ -71,6 +72,8 @@ export default function App() {
         <main className="flex-1 pb-16">
             <Routes>
             <Route path="/" element={<Navigate to="/players" replace />} />
+            {/* Magic link from the Discord #info channel: scope to a server, then redirect. */}
+            <Route path="/s/:key" element={<ServerLink />} />
             <Route path="/players" element={<PlayersPage />} />
             <Route path="/build" element={<TeamBuilderPage />} />
             <Route path="/matches" element={<MatchesPage />} />

@@ -13,16 +13,31 @@ import { ensureLobbyChannel } from '../discord/voice';
 import { apiRegisterServer } from '../api';
 import { config } from '../config';
 
+//Origin of the website (WEBSITE_URL may point at a sub-path like /build).
+function serverBaseUrl(): string {
+    try {
+        return new URL(config.WEBSITE_URL).origin;
+    } catch {
+        return config.WEBSITE_URL.replace(/\/+$/, '');
+    }
+}
+
+//One-click magic link that scopes the website to this server (see client /s/:key).
+export function joinLink(serverKey: string): string {
+    return `${serverBaseUrl()}/s/${serverKey}`;
+}
+
 /*
-    The info channel posts: website + key + signup, then lifecycle + commands.
+    The info channel posts: website link + key + signup, then lifecycle + commands.
     Discord caps a message at 2000 chars, so this is SPLIT into multiple
     messages — keep each part comfortably under the limit when editing.
 */
 function infoParts(commandsChannelId: string, serverKey: string): string[] {
     const signup =
         `## LoL Match Maker\n` +
-        `**Website:** ${config.WEBSITE_URL}\n` +
-        `**This server's key:** \`${serverKey}\` — paste it on the website (top right) to see THIS server's players and matches. Don't share it outside this server.\n\n` +
+        `**Open this server's site (one click):** ${joinLink(serverKey)}\n` +
+        `That scopes the website to THIS server. Keep the link inside this server. ` +
+        `(Manual entry key, if you need it: \`${serverKey}\`)\n\n` +
         `**How to sign up**\n` +
         `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\` (answer the champion pool question).\n` +
         `2. That unlocks the server and gives you a rank role synced from the website.\n` +
@@ -304,15 +319,16 @@ export const setup: Command = {
             await stale.delete().catch(() => undefined);
         }
 
+        const link = joinLink(serverKey);
         const websiteNote = serverCreated
-            ? `🌐 **Website access for this server**: the server key is \`${serverKey}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
-                `Members paste it on the website to see this server's data; admins unlock with the password you just set.\n\n`
+            ? `🌐 **Website access for this server**: one-click link \`${link}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
+                `Members click it to see this server's data; admins then unlock with the password you just set.\n\n`
             : rotatedKey
-                ? `🌐 Server key **rotated** to \`${serverKey}\` — the old key no longer works, re-share this one. ` +
-                    (password ? 'Website admin password also updated (old logins signed out).\n\n' : '\n\n')
+                ? `🌐 Server key **rotated** — the old link no longer works, re-share: \`${link}\` ` +
+                    (password ? '(website admin password also updated, old logins signed out).\n\n' : '\n\n')
                 : password
-                    ? `🌐 Website admin password **updated** — existing website logins are signed out. Server key (unchanged): \`${serverKey}\`.\n\n`
-                    : `🌐 Server already registered — key: \`${serverKey}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
+                    ? `🌐 Website admin password **updated** — existing website logins are signed out. Server link (unchanged): \`${link}\`.\n\n`
+                    : `🌐 Server already registered — link: \`${link}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
 
         await interaction.editReply(
         `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + match lifecycle + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +

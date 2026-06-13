@@ -43,7 +43,9 @@ export function AuthControl() {
     };
 
     const submit = async () => {
-        const key = keyInput.trim();
+        //Fall back to the key already in scope (e.g. set by a magic link), so an
+        //admin only needs to type the password to unlock.
+        const key = keyInput.trim() || serverKey || '';
         const pw = password.trim();
         if (!key && !pw) return;
         setBusy(true);
@@ -153,8 +155,9 @@ export function AuthControl() {
                 </div>
             </div>
             <p className="mt-2 text-[11px] leading-snug text-slate-500">
-                The key scopes this site to your Discord server's players and matches. The password (set
-                with /setup) unlocks admin actions.
+                Tip: the link in your Discord <span className="font-mono">#info</span> channel scopes the
+                site in one click — you only need this box to enter the admin password (set with /setup)
+                to unlock admin actions.
             </p>
             </div>
         )}

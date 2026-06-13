@@ -43,7 +43,9 @@ Every Discord server the bot is invited to is its own isolated tenant: players, 
 bot commands all carry the server's guild id and are never shared between servers.
 
 - `/setup password:<...>` registers the server and returns an unguessable **server key**
-  (posted in the #info channel). Pasting it on the website scopes the site to that server.
+  (posted in the #info channel as a one-click link `https://<site>/s/<key>`). Opening the link
+  scopes the site to that server and then strips the key from the URL (it's kept in
+  localStorage and sent as `X-Server-Key`); the key can also be pasted manually.
 - The **admin password** (scrypt-hashed in MongoDB) is exchanged at login for a signed,
   expiring, **version-stamped** token that unlocks admin actions for that server only.
   Rotating the password (owner-only) bumps the version and logs out old sessions.
