@@ -13,22 +13,30 @@ import { ensureLobbyChannel } from '../discord/voice';
 import { apiRegisterServer } from '../api';
 import { config } from '../config';
 
-//The info channel post: website + key, how to sign up, match lifecycle, what the bot can do
-function infoText(commandsChannelId: string, serverKey: string): string {
-    return (
+/*
+    The info channel posts: website + key + signup, then lifecycle + commands.
+    Discord caps a message at 2000 chars, so this is SPLIT into multiple
+    messages — keep each part comfortably under the limit when editing.
+*/
+function infoParts(commandsChannelId: string, serverKey: string): string[] {
+    const signup =
         `## LoL Match Maker\n` +
         `**Website:** ${config.WEBSITE_URL}\n` +
         `**This server's key:** \`${serverKey}\` — paste it on the website (top right) to see THIS server's players and matches. Don't share it outside this server.\n\n` +
         `**How to sign up**\n` +
         `1. Go to <#${commandsChannelId}> and run \`/link player:<your name>\` (answer the champion pool question).\n` +
         `2. That unlocks the server and gives you a rank role synced from the website.\n` +
-        `3. Linked the wrong account? \`/unlink\`, then /link again.\n\n` +
+        `3. Linked the wrong account? \`/unlink\`, then /link again.`;
+
+    const lifecycle =
         `**How a match lives** (proposed → in progress → completed)\n` +
         `1. **Propose**: build the teams on the website and submit the match (non-admins: one open proposal at a time; you can delete your own with \`/match delete\`).\n` +
         `2. **Start**: \`/match setup\` — every linked player in the lobby must approve. Channels are created, teams are moved in, and a match chat thread opens for as long as the game runs (max ~2 hours).\n` +
         `3. **Play**: \`/match join\` / \`/match split\` move everyone between Game Comms and team channels. Players can only be in one active game at a time.\n` +
         `4. **Finish**: \`/match confirm\` — the bot auto detects the winner from Riot match history when it can; otherwise an admin decides or the lobby votes. MMR is applied and the match is final (admins can do the same from the website).\n` +
-        `5. Changed plans? \`/match cancel\` returns an active game to proposed; \`/match delete\` removes it (in-progress deletion needs an admin or a unanimous vote).\n\n` +
+        `5. Changed plans? \`/match cancel\` returns an active game to proposed; \`/match delete\` removes it (in-progress deletion needs an admin or a unanimous vote).`;
+
+    const commands =
         `**Bot commands** (only work in <#${commandsChannelId}>)\n` +
         `\`/match setup\` : start a proposed match (channels + teams moved in)\n` +
         `\`/match split\` : re send everyone to their team channels\n` +
@@ -37,8 +45,9 @@ function infoText(commandsChannelId: string, serverKey: string): string {
         `\`/match cancel\` : stop an active game, back to proposed\n` +
         `\`/match delete\` : delete a proposal (or void an active game)\n` +
         `\`/update\` : change your champion pool answer\n\n` +
-        `Not an admin? Match commands open a lobby vote: a majority of the game's linked players decides (starting or voiding a game needs everyone).`
-    );
+        `Not an admin? Match commands open a lobby vote: a majority of the game's linked players decides (starting or voiding a game needs everyone).`;
+
+    return [signup, lifecycle, commands];
 }
 
 export const setup: Command = {
@@ -250,12 +259,26 @@ export const setup: Command = {
             await info.edit({ permissionOverwrites: infoOverwrites });
         }
 
-        //Edit the bot's existing info post if there is one, otherwise post fresh
-        const text = infoText(commands.id, serverKey);
+        /*
+            Edit the bot's existing info posts in place (oldest first) so the
+            channel doesn't churn; send any parts that don't exist yet and drop
+            leftovers from older layouts with more/fewer messages.
+        */
+        const parts = infoParts(commands.id, serverKey);
         const recent = await info.messages.fetch({ limit: 50 }).catch(() => null);
-        const mine = recent?.find((m) => m.author.id === guild.members.me?.id);
-        if (mine) await mine.edit(text);
-        else await info.send(text);
+        const mine = recent
+            ? [...recent.values()]
+                .filter((m) => m.author.id === guild.members.me?.id)
+                .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+            : [];
+        for (let i = 0; i < parts.length; i++) {
+            const existing = mine[i];
+            if (existing) await existing.edit(parts[i]!);
+            else await info.send(parts[i]!);
+        }
+        for (const stale of mine.slice(parts.length)) {
+            await stale.delete().catch(() => undefined);
+        }
 
         const websiteNote = serverCreated
             ? `🌐 **Website access for this server**: the server key is \`${serverKey}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
