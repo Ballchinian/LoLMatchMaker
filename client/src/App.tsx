@@ -50,9 +50,9 @@ export default function App() {
             <header className="flex flex-wrap items-center justify-between gap-4 py-6">
                 <div className="flex items-center gap-3">
                     <img
-                        src="/MatchMakerLogoFull.png"
+                        src="/logo-emblem.png"
                         alt="LoL Match Maker logo"
-                        className="h-10 w-10 rounded-xl object-cover"
+                        className="h-14 w-14 rounded-xl object-cover"
                     />
                     <div>
                         <h1 className="text-lg font-bold leading-tight text-white">LoL Match Maker</h1>
