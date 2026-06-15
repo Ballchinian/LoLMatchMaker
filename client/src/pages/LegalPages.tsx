@@ -31,7 +31,9 @@ function H({ children }: { children: ReactNode }) {
 
 export function TermsPage() {
     return (
-        <Legal title="Terms of Service — LoL Match Maker">
+        
+        <Legal title="Terms of Service — LoL Match Maker" >
+            
             <p>
                 LoL Match Maker ("the Service") is a free, hobby-run tool consisting of this website and a
                 Discord bot that organise custom League of Legends in-house games: balanced teams, an
@@ -77,6 +79,7 @@ export function TermsPage() {
                 Riot Games, and all associated properties are trademarks or registered trademarks of Riot
                 Games, Inc. League of Legends © Riot Games, Inc.
             </p>
+            
         </Legal>
     );
 }

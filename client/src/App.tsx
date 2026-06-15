@@ -52,7 +52,7 @@ export default function App() {
                     <img
                         src="/logo-emblem.png"
                         alt="LoL Match Maker logo"
-                        className="h-14 w-14 rounded-xl object-cover"
+                        className="h-15 w-15 rounded-xl object-fit"
                     />
                     <div>
                         <h1 className="text-lg font-bold leading-tight text-white">LoL Match Maker</h1>
