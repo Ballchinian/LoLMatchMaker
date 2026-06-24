@@ -32,7 +32,7 @@ function H({ children }: { children: ReactNode }) {
 export function TermsPage() {
     return (
         
-        <Legal title="Terms of Service — LoL Match Maker" >
+        <Legal title="LoL Match Maker Terms of Service" >
             
             <p>
                 LoL Match Maker ("the Service") is a free, hobby-run tool consisting of this website and a
@@ -86,7 +86,7 @@ export function TermsPage() {
 
 export function PrivacyPage() {
     return (
-        <Legal title="Privacy Policy — LoL Match Maker">
+        <Legal title="LoL Match Maker Privacy Policy">
             <p>
                 This policy explains what data LoL Match Maker (the website and the Discord bot) stores,
                 why, and how to get it removed. The short version: we store the minimum needed to run an
@@ -95,7 +95,7 @@ export function PrivacyPage() {
 
             <H>What we store</H>
             <p>
-                <strong>Discord:</strong> server (guild) IDs and names, and — when you link a player — your
+                <strong>Discord:</strong> server (guild) IDs and names, and (when you link a player) your
                 Discord user ID. The bot reads member/voice state to move players between channels and
                 deletes non-command messages in its commands channel; message content is never stored.
                 <br />
@@ -107,7 +107,7 @@ export function PrivacyPage() {
                 records, tags, and match results (teams, winners, timestamps).
                 <br />
                 <strong>Server settings:</strong> each server's website admin password is stored only as a
-                salted scrypt hash — never in plain text.
+                salted scrypt hash, never in plain text.
             </p>
 
             <H>What we don't do</H>

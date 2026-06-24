@@ -154,7 +154,7 @@ async function confirmMatch(match: MatchDoc, winner: 'A' | 'B', actor: Actor) {
  * (clamped at 0), then flag the match `reversed`. It STAYS in history for audit.
  *
  * Note: this removes exactly this match's point swing. If players have since played
- * other games, those remain — a full ladder recompute would be a separate feature.
+ * other games, those remain. A full ladder recompute would be a separate feature.
  */
 async function reverseMatch(match: MatchDoc, actor: Actor) {
   const allIds = [...match.teamA, ...match.teamB].map((e) => e.player.toString());
@@ -164,7 +164,7 @@ async function reverseMatch(match: MatchDoc, actor: Actor) {
   const undo = (entries: RosterEntry[], won: boolean) => {
     for (const e of entries) {
       const p = byId.get(e.player.toString());
-      if (!p) continue; // player no longer exists — skip
+      if (!p) continue; // player no longer exists: skip
       p.mmr = Math.max(0, p.mmr - (e.delta ?? 0));
       // Restore the uncertainty this game consumed (pre-Glicko matches have none).
       if (e.rdBefore != null) p.rd = e.rdBefore;
@@ -188,7 +188,7 @@ async function reverseMatch(match: MatchDoc, actor: Actor) {
 
 /* -------------------------------- routes ------------------------------- */
 
-/** GET /api/matches — this server's games, newest first (pending + confirmed). Public within scope. */
+/** GET /api/matches: this server's games, newest first (pending + confirmed). Public within scope. */
 matchesRouter.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -198,10 +198,10 @@ matchesRouter.get(
 );
 
 /**
- * GET /api/matches/:id/detected-winner — best-effort: find the played custom
+ * GET /api/matches/:id/detected-winner, best-effort: find the played custom
  * game in Riot match history and report who won. `detected: null` means
- * "couldn't tell" (plain customs aren't guaranteed to appear in match-v5) —
- * the caller should fall back to asking the players.
+ * "couldn't tell" (plain customs aren't guaranteed to appear in match-v5).
+ * The caller should fall back to asking the players.
  */
 matchesRouter.get(
   '/:id/detected-winner',
@@ -231,7 +231,7 @@ matchesRouter.get(
 );
 
 /**
- * POST /api/matches — create a matchup (auto-balanced or hand-made). PUBLIC route.
+ * POST /api/matches: create a matchup (auto-balanced or hand-made). PUBLIC route.
  *
  * - Public visitors: always creates a PENDING submission for the admin to review
  *   (their `winner` is ignored; `proposedWinner`/`reportedBy` are recorded). Spam-capped.
@@ -261,7 +261,7 @@ matchesRouter.post(
       if (!proposedByPlayer) {
         throw new ApiError(400, 'Pick which of the match\'s players you are before proposing.');
       }
-      // ...and may only have ONE open proposal at a time (delete it to re-propose).
+      // ...and may only have ONE open proposal at a time (delete it to repropose).
       const open = await Match.findOne({
         guildId,
         status: { $in: ['pending', 'inProgress'] },
@@ -312,7 +312,7 @@ matchesRouter.post(
 );
 
 /**
- * POST /api/matches/:id/confirm — confirm a pending match's winner (applies MMR). Admin/bot.
+ * POST /api/matches/:id/confirm: confirm a pending match's winner (applies MMR). Admin/bot.
  * If `winner` is omitted, falls back to the reporter's proposed winner.
  */
 matchesRouter.post(
@@ -327,7 +327,7 @@ matchesRouter.post(
 
     const effectiveWinner = winner ?? match.proposedWinner ?? null;
     if (effectiveWinner !== 'A' && effectiveWinner !== 'B') {
-      throw new ApiError(400, 'Specify the winner (A or B) — no proposed winner to fall back on.');
+      throw new ApiError(400, 'Specify the winner (A or B). No proposed winner to fall back on.');
     }
 
     const players = await confirmMatch(match, effectiveWinner, req.actor!);
@@ -336,7 +336,7 @@ matchesRouter.post(
 );
 
 /**
- * POST /api/matches/:id/start — pending -> inProgress (the bot set up the game). Admin/bot.
+ * POST /api/matches/:id/start: pending -> inProgress (the bot set up the game). Admin/bot.
  * A player may only be in ONE active game at a time, admins included.
  */
 matchesRouter.post(
@@ -377,7 +377,7 @@ matchesRouter.post(
   }),
 );
 
-/** POST /api/matches/:id/stop — inProgress -> pending (the active game was cancelled). Admin/bot. */
+/** POST /api/matches/:id/stop: inProgress -> pending (the active game was cancelled). Admin/bot. */
 matchesRouter.post(
   '/:id/stop',
   requireWriter,
@@ -393,7 +393,7 @@ matchesRouter.post(
   }),
 );
 
-/** POST /api/matches/:id/reverse — undo a confirmed match's MMR; keep it in history. Admin/bot. */
+/** POST /api/matches/:id/reverse: undo a confirmed match's MMR; keep it in history. Admin/bot. */
 matchesRouter.post(
   '/:id/reverse',
   requireWriter,
@@ -408,7 +408,7 @@ matchesRouter.post(
 );
 
 /**
- * DELETE /api/matches/:id — remove a match entirely. Confirmed matches are immutable.
+ * DELETE /api/matches/:id: remove a match entirely. Confirmed matches are immutable.
  * - admin/bot: pending and in-progress matches (in-progress deletion is the
  *   exceptional "void this game" path; the bot gates it behind a unanimous vote)
  * - public: only their OWN pending proposal, proven by the X-Proposal-Token
@@ -422,7 +422,7 @@ matchesRouter.delete(
 
     if (isPrivileged) {
       if (match.status !== 'pending' && match.status !== 'inProgress') {
-        throw new ApiError(409, 'Confirmed matches can\'t be deleted — reverse them instead.');
+        throw new ApiError(409, 'Confirmed matches can\'t be deleted. Reverse them instead.');
       }
     } else {
       if (match.status !== 'pending') {

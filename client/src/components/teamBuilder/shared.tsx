@@ -17,7 +17,7 @@ export interface DragState {
     over: Side | null;
 }
 
-//The adjusted MMR — what users see everywhere (the modifier itself is hidden).
+//The adjusted MMR: what users see everywhere (the modifier itself is hidden).
 export function Value({ player }: { player: Player }) {
     return <span className="w-12 text-right font-semibold text-indigo-300">{player.effectiveMmr}</span>;
 }

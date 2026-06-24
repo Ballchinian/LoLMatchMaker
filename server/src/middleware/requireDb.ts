@@ -9,7 +9,7 @@ export function requireDb(_req: Request, res: Response, next: NextFunction): voi
   if (!isDbConnected()) {
     res.status(503).json({
       error:
-        'Database unavailable — the server cannot reach MongoDB. Check MONGODB_URI and your Atlas network access.',
+        'Database unavailable. The server cannot reach MongoDB. Check MONGODB_URI and your Atlas network access.',
     });
     return;
   }

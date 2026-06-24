@@ -13,7 +13,7 @@ import { syncMemberRoles } from '../discord/roles';
     players; if you type a Riot ID (Name#Tag) that isn't on the roster yet, it
     offers a "Create & link" choice that creates the player from Riot on submit
     (the Riot lookup runs here, NOT during autocomplete, which has a ~3s budget).
-    Either way you end up linked — and link is 1:1 per server, so a person can
+    Either way you end up linked, and link is 1:1 per server, so a person can
     only ever hold one self-created player at a time.
 */
 
@@ -23,7 +23,7 @@ const CREATE_PREFIX = 'new:';
 export const link: Command = {
     data: new SlashCommandBuilder()
         .setName('link')
-        .setDescription('Link your Discord to your player — or type your Riot ID to create it')
+        .setDescription('Link your Discord to your player, or type your Riot ID to create it')
         .addStringOption((o) =>
             o
                 .setName('player')
@@ -47,7 +47,7 @@ export const link: Command = {
             /*
                 Anti-hop guard: if this Discord account is already on a player that
                 has PLAYED (or is in an open match), you can't switch it to a
-                different player — that's how someone dodges a bad MMR streak by
+                different player. That's how someone dodges a bad MMR streak by
                 jumping to a fresh account. You can only switch while your current
                 account is still clean (0 games, no open match). Admins move links
                 via the website.
@@ -95,7 +95,7 @@ export const link: Command = {
                 } catch (err) {
                     if (/already/i.test((err as Error).message)) {
                         await interaction.editReply(
-                            '❌ That Riot account is already on the roster — start typing its name and pick it from the list instead.',
+                            '❌ That Riot account is already on the roster. Start typing its name and pick it from the list instead.',
                         );
                         return;
                     }
@@ -127,7 +127,7 @@ export const link: Command = {
             const movedNote = movedFrom ? ` (moved from **${movedFrom}**)` : '';
             //Champ pool is auto-detected from recent ranked play; /update changes it.
             const poolNote = createdNote
-                ? ` Champ pool auto-detected as **${player.champPool}** — change it with /update.`
+                ? ` Champ pool auto-detected as **${player.champPool}**. Change it with /update.`
                 : '';
             await interaction.editReply(
                 `✔️ Linked to **${player.displayName}**${createdNote}${movedNote}.${roleNote}${poolNote}`,

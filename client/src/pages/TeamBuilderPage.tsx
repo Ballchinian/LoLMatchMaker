@@ -63,12 +63,12 @@ export default function TeamBuilderPage() {
       const lobby = data.match.name ? ` "${data.match.name}"` : '';
       if (opts.winner) {
         qc.invalidateQueries({ queryKey: ['players'] });
-        setNotice(`Confirmed — Team ${opts.winner} won. MMR updated.`);
+        setNotice(`Confirmed. Team ${opts.winner} won. MMR updated.`);
       } else {
         setNotice(
           privileged
-            ? `Saved as proposed lobby${lobby} — confirm the winner from the Matches tab.`
-            : `Match proposed${lobby} — start it from Discord with /match setup, or wait for an admin. You can delete your own proposal from the Matches tab.`,
+            ? `Saved as proposed lobby${lobby}. Confirm the winner from the Matches tab.`
+            : `Match proposed${lobby}. Start it from Discord with /match setup, or wait for an admin. You can delete your own proposal from the Matches tab.`,
         );
       }
       setAssign({ a: [], b: [] });
@@ -109,10 +109,10 @@ export default function TeamBuilderPage() {
         <Card>
           <div className="flex flex-wrap items-center gap-3">
             <button className={btnPrimary} onClick={generate} disabled={!canBalance || balance.isPending}>
-              {balance.isPending ? 'Balancing…' : 'Auto-balance'}
+              {balance.isPending ? 'Balancing...' : 'Auto-balance'}
             </button>
             <button className={btnGhost} onClick={reRoll} disabled={!canBalance || balance.isPending}>
-              Re-roll (no repeat)
+              Reroll (no repeat)
             </button>
             {(assign.a.length > 0 || assign.b.length > 0) && (
               <button className={btnGhost} onClick={() => setAssign({ a: [], b: [] })}>
@@ -230,7 +230,7 @@ export default function TeamBuilderPage() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs text-slate-500">I am:</span>
                   <select className={selectCls} value={proposerId} onChange={(e) => setProposerId(e.target.value)}>
-                    <option value="">Pick yourself…</option>
+                    <option value="">Pick yourself...</option>
                     {[...assign.a, ...assign.b].map((id) => (
                       <option key={id} value={id}>
                         {byId.get(id)?.displayName ?? id}

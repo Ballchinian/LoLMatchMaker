@@ -63,7 +63,7 @@ export const unlink: Command = {
 
         /*
             Unlink = remove yourself. A "clean" player (no games, no open match)
-            is fully DELETED — there's no ladder history to keep, and this stops
+            is fully DELETED. There's no ladder history to keep, and this stops
             unlink/relink alias churn. Once you've played (or have an open match)
             your record can't be self-removed: a non-admin is told to ask an
             admin; an admin self-unlinks WITHOUT deleting, so the ladder history
@@ -97,7 +97,7 @@ export const unlink: Command = {
         //Has history / an open match → can't be deleted.
         if (!(await isAdmin(interaction))) {
             await interaction.editReply(
-                `❌ You've already played games${inOpenMatch ? ' / have an open match' : ''}, so you can't remove yourself — ask an admin.`,
+                `❌ You've already played games${inOpenMatch ? ' / have an open match' : ''}, so you can't remove yourself, ask an admin.`,
             );
             return;
         }

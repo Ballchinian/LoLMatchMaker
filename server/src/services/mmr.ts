@@ -31,7 +31,7 @@ function clamp(n: number, lo: number, hi: number): number {
 
 /*
     Seed adjustment from current-season ranked WIN RATE (KDA is deliberately
-    ignored — win rate is the cleaner signal at our volumes). Win rate above/below
+    ignored, win rate is the cleaner signal at our volumes). Win rate above/below
     50% pushes the rank-based seed up/down, scaled by how many games back it up:
 
     - magnitude = (winRate - 0.5) * 2000  → +200 at 60%, +400 at 70%, etc.
@@ -96,7 +96,7 @@ export function versatilityModifier(champPool: string | undefined | null): numbe
  */
 export function classifyChampPool(championCounts: Map<string, number>, games: number): ChampPool | null {
     if (games <= 0 || championCounts.size === 0) return null;
-    //Too few ranked games to read a one-trick — treat as diverse (new/low play).
+    //Too few ranked games to read a one-trick: treat as diverse (new/low play).
     if (games < 10) return 'diverse';
     const sorted = [...championCounts.values()].sort((a, b) => b - a);
     const top = sorted[0] ?? 0;

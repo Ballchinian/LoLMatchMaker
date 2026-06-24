@@ -67,7 +67,7 @@ function RiotSearch() {
                 <input className={inputCls} value={tagLine} onChange={(e) => setTagLine(e.target.value)} placeholder="KR1" />
             </div>
             <button type="submit" className={btnGhost} disabled={search.isPending}>
-                {search.isPending ? 'Searching…' : 'Search'}
+                {search.isPending ? 'Searching...' : 'Search'}
             </button>
         </form>
 
@@ -94,11 +94,11 @@ function RiotSearch() {
 
             {result.alreadyInjected ? (
                 <p className="mt-3 text-sm text-amber-400">
-                    Already injected — players can't be re-uploaded.
+                    Already injected. Players can't be reuploaded.
                 </p>
             ) : (
                 <button className={`${btnPrimary} mt-3`} disabled={inject.isPending} onClick={() => inject.mutate()}>
-                    {inject.isPending ? 'Injecting…' : 'Inject player'}
+                    {inject.isPending ? 'Injecting...' : 'Inject player'}
                 </button>
             )}
             {inject.isError && <p className="mt-2 text-sm text-rose-400">{apiErrorMessage(inject.error)}</p>}
@@ -212,7 +212,7 @@ function ManualAdd() {
             </div>
             ) : (
             <div>
-                <label className="mb-1 block text-xs text-slate-400">Raw MMR (0–6000)</label>
+                <label className="mb-1 block text-xs text-slate-400">Raw MMR (0-6000)</label>
                 <input
                 type="number"
                 className={inputCls}
@@ -230,7 +230,7 @@ function ManualAdd() {
             </div>
 
             <button type="submit" className={btnPrimary} disabled={add.isPending}>
-                {add.isPending ? 'Adding…' : 'Add player'}
+                {add.isPending ? 'Adding...' : 'Add player'}
             </button>
             {add.isError && <p className="text-sm text-rose-400">{apiErrorMessage(add.error)}</p>}
         </form>
@@ -265,7 +265,7 @@ function Roster() {
         );
     }, [players, filter, search]);
 
-    if (isLoading) return <Card>Loading roster…</Card>;
+    if (isLoading) return <Card>Loading roster...</Card>;
     if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
     if (!players || players.length === 0)
         return <Card><span className="text-slate-400">No players yet. Search Riot or add one manually.</span></Card>;
@@ -282,7 +282,7 @@ function Roster() {
                 <input
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search name…"
+                    placeholder="Search name..."
                     className="w-40 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-500"
                 />
                 <TagFilterBar players={players} selected={filter} onToggle={toggleFilter} onClear={() => setFilter(new Set())} />
@@ -353,7 +353,7 @@ export default function PlayersPage() {
                     {riotDisabled ? (
                     <Card className="border-amber-700/40 bg-amber-950/20">
                         <p className="text-sm text-amber-300">
-                            Riot search is disabled — no API key configured on the server. Add one to
+                            Riot search is disabled. No API key configured on the server. Add one to
                             <span className="font-mono"> server/.env</span> (RIOT_API_KEY) to enable it. You can still
                             add players manually.
                         </p>

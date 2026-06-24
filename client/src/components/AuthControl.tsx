@@ -180,13 +180,13 @@ export function AuthControl() {
                             disabled={busy}
                             className="rounded-lg bg-indigo-500 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-400 disabled:opacity-50"
                         >
-                            {busy ? 'Checking…' : actor ? 'Switch / re-unlock' : 'Connect'}
+                            {busy ? 'Checking...' : actor ? 'Switch / reunlock' : 'Connect'}
                         </button>
                     </div>
                 </div>
                 <p className="mt-2 text-[11px] leading-snug text-slate-500">
                     Tip: the link in your Discord <span className="font-mono">#info</span> channel scopes the
-                    site in one click, then you only need the admin password here. Use “View as player” to drop
+                    site in one click, then you only need the admin password here. Use "View as player" to drop
                     admin without leaving the server.
                 </p>
             </div>

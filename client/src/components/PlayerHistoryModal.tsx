@@ -120,7 +120,7 @@ export function PlayerHistoryModal({ player, onClose }: { player: Player; onClos
                             </li>
                         ))}
                     </ul>
-                    <p className="mt-3 text-[11px] text-slate-600">{new Date(games[0]!.when).toLocaleString()} — most recent</p>
+                    <p className="mt-3 text-[11px] text-slate-600">{new Date(games[0]!.when).toLocaleString()} (most recent)</p>
                 </>
                 )}
             </div>

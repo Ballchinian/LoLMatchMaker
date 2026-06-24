@@ -1,7 +1,7 @@
 /**
  * Glicko-style rating with an uncertainty term (RD), replacing plain Elo.
  *
- * Every player carries a rating (their MMR, same 0..6000 scale as before — the
+ * Every player carries a rating (their MMR, same 0..6000 scale as before; the
  * expectation curve is the standard Elo/Glicko 400-point logistic) plus an RD
  * ("rating deviation"): how unsure the system is about that rating. RD drives
  * how far a single game can move someone:
@@ -10,12 +10,12 @@
  *   - low RD (regular at the floor)        -> steady ±25-40 swings
  *
  * RD shrinks with every game played (each result is evidence) and grows with
- * inactivity (skills drift; a returner re-calibrates in a few games). This
+ * inactivity (skills drift; a returner recalibrates in a few games). This
  * replaces the old hand-rolled `newPlayerBoost` ×2-decay entirely.
  *
  * Seeding: a player's starting RD depends on how much CURRENT-season ranked
  * data backs their Riot rank. The curve composes like statistical precision
- * (1/RD² grows linearly with games — steep at first, flattening out):
+ * (1/RD² grows linearly with games, steep at first, flattening out):
  *
  *   ranked games:   0    10    30    50   100   200+      (no rank data)
  *   seed RD:       250   215   175   151   118    89          300
@@ -28,7 +28,7 @@
 
 const Q = Math.LN10 / 400; // Glicko's q: converts rating-point gaps to log-odds
 
-/** RD never drops below this — ratings stay slightly alive forever (≈ old K=32). */
+/** RD never drops below this: ratings stay slightly alive forever (≈ old K=32). */
 export const RD_FLOOR = 75;
 
 /** RD never grows past this through inactivity. */
@@ -46,7 +46,7 @@ export const SEED_RANKED_GAMES_CAP = 200;
 /**
  * Precision (1/RD²) added per current-season ranked game. Calibrated so the
  * curve passes through RD 175 at 30 games; it bottoms out at ≈89 by 200 games,
- * deliberately above RD_FLOOR — soloqueue evidence alone never grants the
+ * deliberately above RD_FLOOR: soloqueue evidence alone never grants the
  * trust of actual inhouse history.
  */
 const SEED_INFO_PER_RANKED_GAME = 5.55e-7;
@@ -84,7 +84,7 @@ export function backfillRD(seedRankedGames: number | null | undefined, inhouseGa
 /**
  * Grow RD for time away. Playing at the league's normal monthly cadence costs
  * nothing; each FURTHER idle month adds 50² to RD², capped at RD_CEILING.
- * (~6 months out: RD 75 -> ≈135, so the comeback games re-calibrate quickly.)
+ * (~6 months out: RD 75 -> ≈135, so the comeback games recalibrate quickly.)
  */
 export function inflateRD(rd: number, lastActiveAt: Date | null | undefined, now: Date = new Date()): number {
   if (!lastActiveAt) return rd;

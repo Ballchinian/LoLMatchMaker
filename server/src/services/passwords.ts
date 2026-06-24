@@ -70,7 +70,7 @@ export function signServerToken(guildId: string, version: number): string {
 }
 
 //Returns the claims baked into a valid, unexpired token, else null. The version
-//is NOT trusted here — the caller compares it against the server's current one.
+//is NOT trusted here: the caller compares it against the server's current one.
 export function verifyServerToken(token: string): ServerTokenClaims | null {
     const parts = token.split('.');
     if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) return null;

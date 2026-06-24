@@ -80,7 +80,7 @@ function voteRow(options: [VoteOption, VoteOption], counts: [number, number], ne
 
 /*
     Run a two-option majority vote: posts the poll + a discussion thread, tracks
-    votes (click the other button to switch, re-click your own to withdraw), and
+    votes (click the other button to switch, reclick your own to withdraw), and
     when an option reaches `votesNeeded` calls `onDecided` with its id, the
     return value becomes the final poll message. closeVote() shows its message
     instead; expiry shows `expiredText`. Shared by the approve/reject and the

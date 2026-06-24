@@ -13,7 +13,7 @@ export const champsOption =
         .setDescription('How many champs can you play AT YOUR PEAK RANK?')
         .setRequired(required)
         .addChoices(
-            { name: 'One-trick — got your peak rank on basically 1 champ', value: 'one-trick' },
-            { name: 'Two champs — strong on about 2', value: 'two-trick' },
-            { name: 'Diverse — comfortable on 3+ (pick this if new / low level)', value: 'diverse' },
+            { name: 'One-trick: got your peak rank on basically 1 champ', value: 'one-trick' },
+            { name: 'Two champs: strong on about 2', value: 'two-trick' },
+            { name: 'Diverse: comfortable on 3+ (pick this if new / low level)', value: 'diverse' },
         );

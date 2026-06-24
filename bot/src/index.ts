@@ -56,13 +56,13 @@ function labelOf(m: ApiMatch): string {
 const SWEEP_INTERVAL_MS = 60_000;
 /** An in-progress game should last about 2 hours; after that it auto-expires. */
 const MATCH_MAX_AGE_MS = 2 * 60 * 60 * 1000;
-/** How often to claim the next website (Discord tab) command — ONE global request, ~5s latency. */
+/** How often to claim the next website (Discord tab) command: ONE global request, ~5s latency. */
 const QUEUE_POLL_INTERVAL_MS = 5_000;
 
 /*
     New-proposal announcements: remember which matches each guild has already
     been told about. Primed silently on the first sweep so a bot restart
-    doesn't re-announce the whole backlog.
+    doesn't reannounce the whole backlog.
 */
 const announcedByGuild = new Map<string, Set<string>>();
 
@@ -87,7 +87,7 @@ async function announceNewMatches(guild: Guild, matches: ApiMatch[]): Promise<vo
         const by = m.reportedBy ? ` by **${m.reportedBy}**` : '';
         await announce(
             guild,
-            `📥 ${adminMention(guild)} — new match proposed${by}: **${labelOf(m)}** ` +
+            `📥 ${adminMention(guild)}: new match proposed${by}: **${labelOf(m)}** ` +
                 `(${m.teamA.length}v${m.teamB.length}). Start it with \`/match setup\`.`,
         );
     }
@@ -110,7 +110,7 @@ async function expireOverdueMatches(guild: Guild, matches: ApiMatch[]): Promise<
             closeMatchVotes(m._id, `**${labelOf(m)}** expired after 2 hours.`);
             await announce(
                 guild,
-                `⏱️ **${labelOf(m)}** has been in progress for over 2 hours — it expired back to **proposed**. ` +
+                `⏱️ **${labelOf(m)}** has been in progress for over 2 hours. It expired back to **proposed**. ` +
                     `Channels are being cleaned up; \`/match setup\` to play it, \`/match confirm\` if it actually finished, or \`/match delete\` to drop it.`,
             );
         } catch (err) {
@@ -122,7 +122,7 @@ async function expireOverdueMatches(guild: Guild, matches: ApiMatch[]): Promise<
 //Delete match chat threads whose match is no longer being played
 async function sweepOrphanedThreads(guild: Guild, activeLabels: Set<string>): Promise<void> {
     for (const thread of await fetchCommandThreads(guild)) {
-        const m = thread.name.match(/^💬 (.+) — match chat$/u);
+        const m = thread.name.match(/^💬 (.+): match chat$/u);
         if (!m || activeLabels.has(m[1]!)) continue;
         await thread.delete().catch(() => undefined);
     }
@@ -131,7 +131,7 @@ async function sweepOrphanedThreads(guild: Guild, activeLabels: Set<string>): Pr
 /*
     Live status under the bot's name ("rich presence"): the game-SDK rich
     presence (party size, join secrets, ...) only exists for desktop apps
-    running on a player's machine — a bot instead gets ONE activity line, so
+    running on a player's machine. A bot instead gets ONE activity line, so
     make it earn its keep by showing the real ladder state across all servers.
     Updated after every sweep; skipped when unchanged (presence is rate limited).
 */
@@ -154,7 +154,7 @@ function updatePresence(inProgress: number, proposed: number): void {
 
 /**
  * The webpage can cancel/confirm/delete a match the bot set channels up for,
- * and the bot never hears about it — so periodically reconcile, per guild:
+ * and the bot never hears about it, so periodically reconcile, per guild:
  * expire 2h-old games, announce new proposals to the admins, and tear down
  * channels/threads whose match is no longer in progress.
  */
@@ -166,7 +166,7 @@ async function sweepAllGuilds(): Promise<void> {
         try {
             matches = await apiGetMatches(guild.id);
         } catch {
-            continue; // API unreachable — don't tear anything down on bad data
+            continue; // API unreachable: don't tear anything down on bad data
         }
         try {
             await expireOverdueMatches(guild, matches);
@@ -192,7 +192,7 @@ async function sweepAllGuilds(): Promise<void> {
     Website Discord tab: admins queue match actions on the backend. The bot
     claims the next one across ALL its guilds in a single request (so polling is
     cheap no matter how many servers it's in) and executes it. The outcome goes
-    back to the website's command log only — we deliberately DON'T post it in the
+    back to the website's command log only. We deliberately DON'T post it in the
     Discord channel (that was noise the lobby didn't ask for).
 */
 let queueBusy = false;
@@ -253,7 +253,7 @@ client.once(Events.ClientReady, async (c) => {
 client.on(Events.GuildCreate, async (guild) => {
     try {
         await registerCommandsForGuild(guild.id);
-        console.log(`[bot] joined ${guild.name}, commands registered — an admin should run /setup password:<...>`);
+        console.log(`[bot] joined ${guild.name}, commands registered. An admin should run /setup password:<...>`);
     } catch (err) {
         console.error(`[bot] command registration failed for new guild ${guild.name}:`, err);
     }
@@ -273,7 +273,7 @@ client.on(Events.GuildDelete, async (guild) => {
 /*
     Discord error 10062 "Unknown interaction": the 3-second ack window expired
     (slow/cold API, or another bot instance with this token already answered).
-    There is nothing left to reply to, so don't try — just note it briefly.
+    There is nothing left to reply to, so don't try, just note it briefly.
 */
 function isUnknownInteraction(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 10062;

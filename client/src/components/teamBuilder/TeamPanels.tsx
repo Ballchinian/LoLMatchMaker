@@ -77,7 +77,7 @@ export function TeamPanel({
                 </li>
             );
             })}
-            {ids.length === 0 && <li className="px-1 py-2 text-xs text-slate-600">empty — drop players here</li>}
+            {ids.length === 0 && <li className="px-1 py-2 text-xs text-slate-600">empty, drop players here</li>}
         </ul>
         </div>
     );

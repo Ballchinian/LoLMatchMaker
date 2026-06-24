@@ -66,7 +66,7 @@ export function MmrEditor({ player }: { player: Player }) {
             disabled={mut.isPending}
             onClick={() => mut.mutate()}
         >
-            {mut.isPending ? 'Saving…' : 'Save'}
+            {mut.isPending ? 'Saving...' : 'Save'}
         </button>
         <button type="button" className="text-slate-400 hover:text-white" onClick={() => setOpen(false)}>
             Cancel

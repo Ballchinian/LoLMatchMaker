@@ -27,6 +27,6 @@ export const update: Command = {
         }
 
         const player = await apiUpdateRoles(guildId, mine.id, { champPool });
-        await interaction.editReply(`✔️ Updated **${player.displayName}** — champ pool: ${champPool}.`);
+        await interaction.editReply(`✔️ Updated **${player.displayName}**, champ pool: ${champPool}.`);
     },
 };

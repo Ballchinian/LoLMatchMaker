@@ -64,9 +64,9 @@ const platformHttp = (): AxiosInstance =>
 const RIOT_429_RETRIES = 3;
 
 /**
- * Every Riot GET goes through here: it waits for the outbound limiter, then —
+ * Every Riot GET goes through here: it waits for the outbound limiter, then,
  * as a safety net if the budget is still exceeded (e.g. another process sharing
- * the key) — honours a 429's Retry-After and retries a few times before giving
+ * the key), honours a 429's Retry-After and retries a few times before giving
  * up. Proactive throttling means 429s should be rare; this stops a transient one
  * from failing a whole reset.
  */
@@ -107,7 +107,7 @@ function toRiotError(err: unknown, context: string): RiotError {
 
 function assertEnabled(): void {
   if (!riotEnabled) {
-    throw new RiotError('Player search is disabled — no Riot API key configured.', 503);
+    throw new RiotError('Player search is disabled. No Riot API key configured.', 503);
   }
 }
 
@@ -199,12 +199,12 @@ export interface DetectedCustomResult {
 /**
  * Best-effort: find the finished custom game these two rosters just played and
  * which side won. Plain customs are NOT guaranteed to appear in match-v5 (only
- * tournament-code games are), so `null` means "couldn't tell — ask the humans",
+ * tournament-code games are), so `null` means "couldn't tell, ask the humans",
  * never "no game happened".
  *
  * Matching is by PUUID overlap: sample a few players' recent match ids since the
  * match was created, keep custom games containing (almost) the whole lobby, then
- * map the in-game winning side back onto our rosters — tolerating one player
+ * map the in-game winning side back onto our rosters, tolerating one player
  * sitting on the "wrong" side compared to the website teams.
  */
 export async function findRecentCustomResult(
@@ -288,8 +288,8 @@ export async function findRecentCustomResult(
  *
  * `includeRecent` (default true) controls the recent-match sample, which is the
  * expensive part (1 + up to RIOT_RECENT_MATCH_COUNT match-detail calls). It's
- * only cosmetic now — seeding uses season W/L from the rank entry, not recent
- * form — so bulk callers (reset) pass false to stay fast and avoid gateway
+ * only cosmetic now (seeding uses season W/L from the rank entry, not recent
+ * form), so bulk callers (reset) pass false to stay fast and avoid gateway
  * timeouts. Search/inject keep it for the preview.
  */
 export async function lookupByRiotId(
@@ -321,7 +321,7 @@ export async function lookupByRiotId(
     throw toRiotError(err, `Riot ID "${cleanName}#${cleanTag}"`);
   }
 
-  // 2) Summoner profile (platform host) — optional cosmetics.
+  // 2) Summoner profile (platform host): optional cosmetics.
   let summonerLevel: number | undefined;
   let profileIconId: number | undefined;
   try {

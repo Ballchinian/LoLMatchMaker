@@ -116,7 +116,7 @@ const matchSchema = new Schema<MatchAttrs, MatchModel>(
 
 // Every hot query filters by guild AND status (list, pending count, the
 // one-active-game clash check, open-match lookups), so a single compound index
-// serves them — and its guildId prefix still covers guild-only scans.
+// serves them, and its guildId prefix still covers guild-only scans.
 matchSchema.index({ guildId: 1, status: 1 });
 
 export const Match: MatchModel =

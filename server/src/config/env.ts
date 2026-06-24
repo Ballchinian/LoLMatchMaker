@@ -37,7 +37,7 @@ const envSchema = z.object({
 
   NODE_ENV: z.string().optional().default('development'),
 
-  // Riot integration is optional — without a key the app still works with manual entry.
+  // Riot integration is optional: without a key the app still works with manual entry.
   RIOT_API_KEY: z.string().optional().default(''),
   RIOT_REGION: z.enum(['americas', 'europe', 'asia', 'sea']).default('europe'),
   RIOT_PLATFORM: z

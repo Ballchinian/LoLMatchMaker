@@ -174,7 +174,7 @@ export const match: Command = {
 
         /*
             The player who proposed a match may delete it themself while it's
-            still just a proposal (e.g. they picked the wrong player) — no vote,
+            still just a proposal (e.g. they picked the wrong player), no vote,
             no admin. Once the game is in progress this shortcut is gone.
         */
         if (sub === 'delete' && match.status === 'pending' && match.proposedByDiscordId === interaction.user.id) {

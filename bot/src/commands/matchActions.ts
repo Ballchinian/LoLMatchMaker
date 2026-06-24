@@ -39,7 +39,7 @@ export function resolve(entries: ApiRosterEntry[], byId: Map<string, ApiPlayer>)
 
 //Name of a match's persistent chat thread (lives while the match is in progress)
 export function matchThreadName(label: string): string {
-    return `💬 ${label} — match chat`;
+    return `💬 ${label}: match chat`;
 }
 
 //Find the commands channel (where votes/threads live), if /setup created it
@@ -131,10 +131,10 @@ async function runSetup(
     await ensureMatchThread(guild, label);
     return (
         `✔️ Created channels for ${label}. Moved ${movedA} player(s) to Team A and ${movedB} to Team B.` +
-        '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to re-send them to their teams.' +
+        '\nUse `/match join` to bring everyone into Game Comms, or `/match split` to resend them to their teams.' +
         '\n⏱️ In-progress games auto-expire after ~2 hours (back to proposed, channels removed).' +
         (unlinked.length
-            ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')} — they should run /link.`
+            ? `\n⚠️ Not linked (couldn't add/move): ${unlinked.join(', ')}. They should run /link.`
             : '')
     );
 }
@@ -159,7 +159,7 @@ export async function performAction(
 
     if (sub === 'setup') {
         if (match.status !== 'pending') {
-        return `⚠️ ${label} is **${match.status}** — only a proposed match can be set up.`;
+        return `⚠️ ${label} is **${match.status}**. Only a proposed match can be set up.`;
         }
         const already = findMatchChannels(guild, label);
         if (already.all.length > 0) {
@@ -202,20 +202,20 @@ export async function performAction(
 
         const { deleted, errors } = await teardown(guild, allLinked, label);
         return withErrors(
-        `✔️ Confirmed — Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
+        `✔️ Confirmed. Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
         errors,
         );
     }
 
     if (sub === 'cancel') {
         if (match.status !== 'inProgress') {
-        return `⚠️ ${label} is **${match.status}** — only an in-progress game can be cancelled (use \`/match delete\` to remove a proposal).`;
+        return `⚠️ ${label} is **${match.status}**. Only an in-progress game can be cancelled (use \`/match delete\` to remove a proposal).`;
         }
         const { deleted, errors } = await teardown(guild, allLinked, label);
         //Back to pending: the match can be reviewed, restarted, or deleted later
         await apiStopMatch(guild.id, match._id).catch(() => undefined);
         return withErrors(
-        `✔️ Cancelled — returned players to Lobby and removed ${deleted} channel(s). ` +
+        `✔️ Cancelled. Returned players to Lobby and removed ${deleted} channel(s). ` +
             'The match is back to **proposed**, so it can be set up again or deleted.',
         errors,
         );
@@ -231,7 +231,7 @@ export async function performAction(
         const { deleted, errors } = await teardown(guild, allLinked, label);
         return withErrors(
             wasInProgress
-                ? `🗑️ Deleted **${label}** mid-game — the match is voided (no MMR was applied), players returned to Lobby, ${deleted} channel(s) removed.`
+                ? `🗑️ Deleted **${label}** mid-game. The match is voided (no MMR was applied), players returned to Lobby, ${deleted} channel(s) removed.`
                 : `🗑️ Deleted the proposal **${label}**.`,
             errors,
         );

@@ -33,5 +33,5 @@ export default function ServerLink() {
 
     //Replace (not push) so Back doesn't return to the key-bearing URL.
     if (done) return <Navigate to="/players" replace />;
-    return <p className="py-16 text-center text-sm text-slate-400">Connecting to your server…</p>;
+    return <p className="py-16 text-center text-sm text-slate-400">Connecting to your server...</p>;
 }

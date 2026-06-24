@@ -273,7 +273,7 @@ export async function lookupServer(serverKey: string): Promise<{ guildId: string
 
 /* ------------------------------- resets -------------------------------- */
 
-//Admin: reset one player (riot refresh + re-seed + zeroed record; link kept).
+//Admin: reset one player (riot refresh + reseed + zeroed record; link kept).
 export async function resetPlayer(
     id: string,
 ): Promise<{ player: Player; before: ResetView; after: ResetView; refreshedFromRiot: boolean }> {

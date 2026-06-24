@@ -30,7 +30,7 @@ export function joinLink(serverKey: string): string {
 /*
     The info channel posts: website link + key + signup, then lifecycle + commands.
     Discord caps a message at 2000 chars, so this is SPLIT into multiple
-    messages — keep each part comfortably under the limit when editing.
+    messages. Keep each part comfortably under the limit when editing.
 */
 function infoParts(commandsChannelId: string, serverKey: string): string[] {
     const signup =
@@ -72,7 +72,7 @@ export const setup: Command = {
         .addStringOption((o) =>
         o
             .setName('password')
-            .setDescription('Website admin password — owner only (set on first setup, same option to change it)')
+            .setDescription('Website admin password: owner only (set on first setup, same option to change it)')
             .setRequired(false)
             .setMinLength(4)
             .setMaxLength(128),
@@ -123,7 +123,7 @@ export const setup: Command = {
         } catch (err) {
             await interaction.editReply(
                 `❌ Couldn't register this server with the backend: ${(err as Error).message}\n` +
-                `The **server owner** must run \`/setup password:<website admin password>\` once — that becomes this server's website admin login. ` +
+                `The **server owner** must run \`/setup password:<website admin password>\` once. That becomes this server's website admin login. ` +
                 `Other admins can rerun \`/setup\` (no password) any time to repair roles/channels.`,
             );
             return;
@@ -319,11 +319,11 @@ export const setup: Command = {
             ? `**Website access for this server**: one-click link \`${link}\` (also posted in **#${config.INFO_CHANNEL_NAME}**). ` +
                 `Members click it to see this server's data; admins then unlock with the password you just set.\n\n`
             : rotatedKey
-                ? `Server key **rotated** — the old link no longer works, re-share: \`${link}\` ` +
+                ? `Server key **rotated**. The old link no longer works, reshare: \`${link}\` ` +
                     (password ? '(website admin password also updated, old logins signed out).\n\n' : '\n\n')
                 : password
-                    ? `Website admin password **updated** — existing website logins are signed out. Server link (unchanged): \`${link}\`.\n\n`
-                    : `Server already registered — link: \`${link}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
+                    ? `Website admin password **updated**. Existing website logins are signed out. Server link (unchanged): \`${link}\`.\n\n`
+                    : `Server already registered. Link: \`${link}\`. (Owner only: \`/setup password:<new>\` changes the password, \`/setup rotate_key:true\` rotates the key.)\n\n`;
 
         await interaction.editReply(
         `✔️ Ready: created the **${config.ADMIN_ROLE_NAME}** admin role, the **${config.LINKED_ROLE_NAME}** role, 10 rank roles, **#${config.COMMANDS_CHANNEL_NAME}**, **#${config.INFO_CHANNEL_NAME}** (website + signup + match lifecycle + command guide), and the **${config.LOBBY_CHANNEL_NAME}** voice channel.\n\n` +

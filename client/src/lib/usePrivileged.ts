@@ -5,7 +5,7 @@ import { useAuth } from '../store/useAuth';
 /*
     A user is "privileged" (can inject, edit tags, confirm/discard results) when they've
     unlocked with an admin/bot token, OR when the server is in open dev mode
-    (writeProtection off — no tokens configured).
+    (writeProtection off: no tokens configured).
 */
 export function usePrivileged(): boolean {
     const actor = useAuth((s) => s.actor);

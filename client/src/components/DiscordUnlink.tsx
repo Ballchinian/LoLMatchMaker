@@ -21,7 +21,7 @@ export function DiscordUnlink({ player }: { player: Player }) {
                 disabled={mut.isPending}
                 onClick={() => mut.mutate()}
             >
-                {mut.isPending ? 'Unlinking…' : 'unlink'}
+                {mut.isPending ? 'Unlinking...' : 'unlink'}
             </button>
             {mut.isError && <span className="text-rose-400">{apiErrorMessage(mut.error)}</span>}
         </div>

@@ -1,152 +1,91 @@
 # League Match Maker
 
-A Discord-integrated League of Legends inhouse platform that creates balanced teams using Riot data, tracks player ratings, and automates match management from lobby creation through result reporting.
+A Discord bot and website for running League of Legends inhouses. It links your Riot account, builds balanced teams from the data, keeps track of how everyone's doing over time, and handles the tedious lobby admin, making voice channels, shuffling people into teams, and recording who won.
 
 ## Features
 
-* Riot account integration
-* Adaptive team balancing
-* MMR and uncertainty-based rating system
-* Match history and statistics
-* Discord voice channel automation
-* Automatic Discord rank roles
-* Multi-server support
-* Player match proposals
-* Admin moderation tools
+- Riot account linking, with ratings seeded from ranked
+- Team balancing that adapts as it learns who's actually carrying
+- Glicko-style ratings (an MMR plus an uncertainty value)
+- Match history and per-player stats
+- Voice channel automation for matches
+- Auto-assigned Discord rank roles
+- Multi-server support, fully isolated per server
+- Players can propose their own matches
+- Admin / moderation tools
 
-## Documentation
+Endpoint docs live in [ENDPOINTS.md](./ENDPOINTS.md).
 
-* [API Endpoints](./ENDPOINTS.md)
+## How ratings work
 
----
+Each player has two numbers. The MMR is the system's guess at your skill, and the RD (rating deviation) is how confident it is in that guess. Lower RD means more certain. The easiest way to read RD is as a ± on your MMR: a new player might be 1500 ± 250, while a regular sits closer to 1500 ± 75.
 
-# How the Rating System Works
+### Seeding a new player
 
-Every player has two numbers:
+When you link a Riot account we pull your ranked data for a starting MMR, then adjust it by your current-season win rate. That adjustment caps at around ±400 (roughly a full tier), but you only get the full swing with a decent sample behind it. Around 70% over 30 games earns the +400; five games barely register. Manual players just start from whatever rating an admin gives them.
 
-* **MMR** — our best estimate of your skill level.
-* **RD (Rating Deviation)** — how confident the system is in that estimate.
+### Starting confidence
 
-Think of RD as a ± value beside your MMR. A new player might be 1500 ± 250, while an established player could be 1500 ± 75.
+The more ranked games you've played this season, the lower your starting RD:
 
-### Initial Rating
+| Ranked games | Starting RD |
+| --- | --- |
+| 0 | 250 |
+| 30 | 175 |
+| 100 | 118 |
+| 200+ | 89 |
+| No rank data | 300 |
 
-When a Riot account is added, the system seeds MMR from the player's ranked data, then adjusts it by current-season ranked **win rate** — up to ±400 (a full tier) for a well-backed sample (e.g. 70% over 30 games → +400; a handful of games barely moves it).
+### After a match
 
-Manual players start from the rating assigned by an administrator.
+Winners gain MMR, losers lose it. How much you move depends on two things: how surprising the result was (upsets shift everyone more), and how high your RD is (if the system's still learning you, it adjusts harder). The more you play, the lower your RD gets, so your rating settles down and stops swinging around. Established players barely move game to game, which is the whole idea.
 
-### Initial Confidence
+### Coming back from a break
 
-The more ranked games played during the current season, the more confidence the system has in the initial rating.
+If you stop playing for a while, your RD slowly climbs back up. So when you return you'll see bigger rating swings for the first few games while it recalibrates. That's expected, not the system being broken.
 
-| Ranked Games | Starting RD |
-| ------------ | ----------- |
-| 0            | 250         |
-| 30           | 175         |
-| 100          | 118         |
-| 200+         | 89          |
-| No rank data | 300         |
+## Discord
 
-### Rating Changes
+Each server runs independently. The bot takes care of account linking, match setup, team voice channels, rank role syncing, result reporting, and onboarding. Nothing is shared between guilds, each server's data stays in that server.
 
-After every match:
+### Player commands
 
-* Winners gain MMR.
-* Losers lose MMR.
-* Unexpected results create larger rating changes.
-* High-RD players move more dramatically while the system learns their skill level.
-* RD decreases as more games are played.
+| Command | What it does |
+| --- | --- |
+| `/link` | Link your Discord account to a player profile |
+| `/update` | Update your champion pool |
+| `/unlink` | Unlink your account |
 
-Established players typically see smaller and more stable rating adjustments.
+### Admin commands
 
-### Returning Players
+| Command | What it does |
+| --- | --- |
+| `/setup` | Configure channels, roles, and website access |
+| `/syncroles` | Sync Discord rank roles |
+| `/match setup` | Create match channels and move players in |
+| `/match split` | Split players into their team channels |
+| `/match join` | Pull players into the shared game channel |
+| `/match confirm` | Record the winner and update ratings |
+| `/match cancel` | Send everyone back to the lobby and remove the match channels |
 
-RD gradually increases after extended inactivity.
+## Match lifecycle
 
-Players returning after a long break therefore experience larger rating movements for a few matches while the system recalibrates their rating.
+Matches go through three stages.
 
----
+A **proposed** match has been created but hasn't started. The proposer can delete their own, and admins can delete any of them.
 
-# Discord Integration
+Once it's **in progress**, everyone has to be in the lobby, and nobody can be in two active matches at the same time. If something goes wrong you can cancel it, which knocks it back to proposed.
 
-Each Discord server operates independently.
+A **confirmed** match is done. Ratings get applied, it's saved to match history, and Discord rank roles sync up automatically.
 
-The bot manages:
+## A typical match
 
-* Account linking
-* Match setup
-* Team voice channels
-* Rank role synchronization
-* Result reporting
-* Server onboarding
-
-Server data is isolated and never shared between guilds.
-
----
-
-# Player Commands
-
-| Command   | Description                                   |
-| --------- | --------------------------------------------- |
-| `/link`   | Link your Discord account to a player profile |
-| `/update` | Update your champion pool selection           |
-| `/unlink` | Unlink your account                           |
-
----
-
-# Admin Commands
-
-| Command          | Description                                           |
-| ---------------- | ----------------------------------------------------- |
-| `/setup`         | Configure channels, roles and website access          |
-| `/syncroles`     | Synchronize Discord rank roles                        |
-| `/match setup`   | Create match channels and move players                |
-| `/match split`   | Move players into team voice channels                 |
-| `/match join`    | Move players into the shared game channel             |
-| `/match confirm` | Record a winner and update ratings                    |
-| `/match cancel`  | Return players to the lobby and remove match channels |
-
----
-
-# Match Lifecycle
-
-## Proposed
-
-A match has been created but has not yet started.
-
-* Can be deleted.
-* The original proposer may delete their own proposal.
-* Administrators may delete any proposal.
-
-## In Progress
-
-The match has been started.
-
-Requirements:
-
-* All players must be present in the lobby.
-* Players may only participate in one active match at a time.
-
-An in-progress match may be cancelled, returning it to Proposed status.
-
-## Confirmed
-
-The result has been recorded.
-
-* Ratings are updated.
-* Match history is preserved.
-* Discord rank roles are synchronized automatically.
-
----
-
-# Typical Flow
-
-1. Teams are balanced on the website.
-2. A match is proposed.
-3. Players join the Discord lobby.
-4. The match is started.
-5. `/match setup` creates team channels and moves players.
-6. Players complete their game.
+1. Balance the teams on the website.
+2. Propose the match.
+3. Everyone joins the Discord lobby.
+4. Start it.
+5. `/match setup` makes the team channels and moves people in.
+6. Play the game.
 7. `/match confirm winner:A|B` records the result.
-8. If Riot API fails, then players vote for the winner
-9. Ratings and Discord roles update automatically.
+8. If the Riot API can't confirm the winner, players vote instead.
+9. Ratings and rank roles update on their own.

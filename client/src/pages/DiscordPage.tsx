@@ -104,7 +104,7 @@ function MatchRow({ m, busy, onAction }: {
                     </span>
                 ) : (
                     <button className={btnEmerald} disabled={busy} onClick={() => setConfirmOpen(true)}>
-                        ✔️ {ACTION_LABEL.confirm}…
+                        ✔️ {ACTION_LABEL.confirm}...
                     </button>
                 )}
                 <button
@@ -126,7 +126,7 @@ function MatchRow({ m, busy, onAction }: {
 
 function CommandLog({ commands }: { commands: BotCommandRecord[] }) {
     if (commands.length === 0) {
-        return <p className="text-sm text-slate-500">No commands sent yet — actions you run appear here with the bot's response.</p>;
+        return <p className="text-sm text-slate-500">No commands sent yet. Actions you run appear here with the bot's response.</p>;
     }
     return (
         <ul className="space-y-2">
@@ -167,7 +167,7 @@ export default function DiscordPage() {
     const enqueue = useMutation({
         mutationFn: enqueueBotCommand,
         onSuccess: (cmd) => {
-            setNotice(`Queued ${ACTION_LABEL[cmd.action]} for ${cmd.matchLabel} — the bot picks it up within ~5s.`);
+            setNotice(`Queued ${ACTION_LABEL[cmd.action]} for ${cmd.matchLabel}. The bot picks it up within ~5s.`);
             qc.invalidateQueries({ queryKey: ['bot-commands'] });
         },
         onError: (err) => setNotice(apiErrorMessage(err)),

@@ -56,7 +56,7 @@ export interface Player {
     region: string;
     seedMMR: number;
     mmr: number;
-    /** Glicko rating deviation — how unsettled the MMR is (75 = veteran … 300 = unknown). */
+    /** Glicko rating deviation: how unsettled the MMR is (75 = veteran ... 300 = unknown). */
     rd: number;
     wins: number;
     losses: number;
@@ -64,7 +64,7 @@ export interface Player {
     tags: string[];
     /** Champion-pool depth: one-tricks are ban-able in tournaments. */
     champPool: ChampPool;
-    /** Champ-pool modifier: -200 … 0 (roles played no longer adjusts MMR). */
+    /** Champ-pool modifier: -200 ... 0 (roles played no longer adjusts MMR). */
     mmrModifier: number;
     /** Adjusted MMR (mmr + modifier): what users see and what balancing uses. */
     effectiveMmr: number;

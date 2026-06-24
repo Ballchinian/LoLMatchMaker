@@ -1,5 +1,5 @@
 # Netlify config for the FRONTEND (the client/ folder).
-# In the Netlify UI you can leave build settings blank — this file drives them.
+# In the Netlify UI you can leave build settings blank: this file drives them.
 
 [build]
   base = "client"

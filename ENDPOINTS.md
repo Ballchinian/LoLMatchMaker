@@ -157,7 +157,7 @@ Reset a player.
 ### Effects
 
 * Refresh Riot information
-* Re-seed rating
+* Reseed rating
 * Clear match record
 
 ### Notes

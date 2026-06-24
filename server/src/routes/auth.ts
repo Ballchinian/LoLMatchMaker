@@ -7,7 +7,7 @@ import { asyncHandler } from '../middleware/errors';
 export const authRouter = Router();
 
 /**
- * GET /api/auth/me — validate the caller's token and return their role
+ * GET /api/auth/me: validate the caller's token and return their role
  * (and, for per-server admin tokens, which server they administer).
  * Used by the web app to confirm a pasted token/password and unlock controls.
  */

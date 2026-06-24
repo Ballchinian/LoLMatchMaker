@@ -19,7 +19,7 @@ const enqueueSchema = z.object({
   winner: z.enum(['A', 'B']).optional(),
 });
 
-/** POST /api/bot-commands — enqueue an action for the bot (website admin). */
+/** POST /api/bot-commands: enqueue an action for the bot (website admin). */
 botCommandsRouter.post(
   '/',
   requireWriter,
@@ -27,7 +27,7 @@ botCommandsRouter.post(
     const body = enqueueSchema.parse(req.body);
     const guildId = req.guildId ?? null;
     if (!guildId) {
-      throw new ApiError(400, 'No server scope — connect with a server key before using the Discord tab.');
+      throw new ApiError(400, 'No server scope. Connect with a server key before using the Discord tab.');
     }
 
     const match = await Match.findById(body.matchId).lean().exec();
@@ -36,7 +36,7 @@ botCommandsRouter.post(
     //Bound the queue: a dead bot shouldn't accumulate clicks
     const waiting = await BotCommand.countDocuments({ guildId, status: { $in: ['queued', 'running'] } }).exec();
     if (waiting >= 10) {
-      throw new ApiError(429, 'The bot has a backlog of commands — is it online? Try again shortly.');
+      throw new ApiError(429, 'The bot has a backlog of commands. Is it online? Try again shortly.');
     }
 
     const command = await BotCommand.create({
@@ -51,7 +51,7 @@ botCommandsRouter.post(
   }),
 );
 
-/** GET /api/bot-commands — recent commands for this server (website admin polls this). */
+/** GET /api/bot-commands: recent commands for this server (website admin polls this). */
 botCommandsRouter.get(
   '/',
   requireWriter,
@@ -62,9 +62,9 @@ botCommandsRouter.get(
 );
 
 /**
- * POST /api/bot-commands/claim-next — the bot atomically claims the oldest
+ * POST /api/bot-commands/claim-next: the bot atomically claims the oldest
  * queued command across ALL its guilds in ONE request (so polling cost is
- * constant, not per-guild). Bot/global-admin only — a per-server token must
+ * constant, not per-guild). Bot/global-admin only: a per-server token must
  * not see another server's commands. Returns { command: null } when idle.
  */
 botCommandsRouter.post(
@@ -84,7 +84,7 @@ botCommandsRouter.post(
 );
 
 /**
- * POST /api/bot-commands/claim — claim the oldest queued command for ONE guild
+ * POST /api/bot-commands/claim: claim the oldest queued command for ONE guild
  * (X-Guild-Id). Kept for completeness; the bot uses claim-next instead.
  */
 botCommandsRouter.post(
@@ -107,7 +107,7 @@ const completeSchema = z.object({
   result: z.string().max(2000),
 });
 
-/** POST /api/bot-commands/:id/complete — the bot reports an outcome. */
+/** POST /api/bot-commands/:id/complete: the bot reports an outcome. */
 botCommandsRouter.post(
   '/:id/complete',
   requireWriter,

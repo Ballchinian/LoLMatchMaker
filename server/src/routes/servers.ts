@@ -47,14 +47,14 @@ const registerSchema = z.object({
   //Current guild owner (bot-reported) and who ran /setup, for the owner-only gate
   ownerId: z.string().max(32).optional(),
   invokerId: z.string().max(32).optional(),
-  //Omitted on plain re-register (channel repair): the existing password is kept
+  //Omitted on plain reregister (channel repair): the existing password is kept
   password: z.string().min(4).max(128).optional(),
   //Regenerate the server key (invalidates the old one everywhere it was shared)
   rotateKey: z.boolean().optional(),
 });
 
 /**
- * POST /api/servers/register — the bot's /setup registers (or updates) its guild.
+ * POST /api/servers/register: the bot's /setup registers (or updates) its guild.
  * GLOBAL admin / bot only (a per-server token must not touch another guild).
  * Returns the server key the website uses for this guild.
  */
@@ -72,8 +72,8 @@ serversRouter.post(
     /*
         Setting the password (incl. the FIRST time), changing it, or rotating the
         key are all takeover vectors, so they're owner-only. The current owner is
-        the stored ownerId (preferred), or — on first setup / servers registered
-        before we stored it — the bot-reported current owner.
+        the stored ownerId (preferred), or (on first setup / servers registered
+        before we stored it) the bot-reported current owner.
     */
     const wantsSensitiveChange = Boolean(body.password) || Boolean(body.rotateKey);
     if (wantsSensitiveChange) {
@@ -109,7 +109,7 @@ serversRouter.post(
 
     server.guildName = body.guildName;
     if (body.ownerId) server.ownerId = body.ownerId;
-    //Re-running /setup with a password rotates it AND logs out old sessions
+    //Rerunning /setup with a password rotates it AND logs out old sessions
     if (body.password) {
       server.adminPasswordHash = hashPassword(body.password);
       server.tokenVersion += 1;
@@ -122,7 +122,7 @@ serversRouter.post(
 );
 
 /**
- * DELETE /api/servers/:guildId — purge a server and ALL its data (the bot calls
+ * DELETE /api/servers/:guildId: purge a server and ALL its data (the bot calls
  * this when it's kicked; the reaper calls it for dead servers). Global/bot only.
  */
 serversRouter.delete(
@@ -150,7 +150,7 @@ const loginSchema = z.object({
 });
 
 /**
- * POST /api/servers/login — exchange a server key + admin password for a
+ * POST /api/servers/login: exchange a server key + admin password for a
  * version-stamped token scoped to that guild. PUBLIC (rate limited + lockout).
  */
 serversRouter.post(
@@ -183,7 +183,7 @@ serversRouter.post(
 );
 
 /**
- * GET /api/servers/lookup — resolve a server key to its name, so the website
+ * GET /api/servers/lookup: resolve a server key to its name, so the website
  * can show which server a visitor is browsing. PUBLIC (rate limited).
  */
 serversRouter.get(

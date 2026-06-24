@@ -63,7 +63,7 @@ teamsRouter.post(
       const reason =
         result.totalValid === 0
           ? 'No team arrangement satisfies the given constraints.'
-          : 'No fresh team arrangements left — every valid split has already been shown.';
+          : 'No fresh team arrangements left. Every valid split has already been shown.';
       throw new ApiError(422, reason);
     }
 

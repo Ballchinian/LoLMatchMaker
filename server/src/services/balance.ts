@@ -15,7 +15,7 @@
  * C(9,4)=126 partitions for a 10-player lobby), so the result is provably optimal.
  *
  * Each partition has a canonical, mirror-invariant `key`. Pass previously-seen keys
- * via `excludeKeys` to get fresh teams on re-roll ("don't repeat teams").
+ * via `excludeKeys` to get fresh teams on reroll ("don't repeat teams").
  */
 
 export interface BalancePlayer {
@@ -176,7 +176,7 @@ export function balanceTeams(players: BalancePlayer[], options: BalanceOptions =
       seen.add(key);
 
       // Both teams divide by the larger team's size (uneven lobbies aren't
-      // averaged independently — see header comment).
+      // averaged independently, see header comment).
       const divisor = Math.max(teamA.length, teamB.length);
       const avgA = totalA / divisor;
       const avgB = totalB / divisor;

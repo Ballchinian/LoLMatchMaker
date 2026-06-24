@@ -41,7 +41,7 @@ export function PlayerReset({ player }: { player: Player }) {
                         window.confirm(
                             `Reset ${player.displayName}?\n\n` +
                             `Current: MMR ${player.mmr} (seed ${player.seedMMR}), ±${player.rd}, ${player.wins}W ${player.losses}L over ${player.gamesPlayed} games.\n\n` +
-                            `This refetches their Riot details (rank, name), re-seeds MMR/RD from it and zeroes their W/L record. ` +
+                            `This refetches their Riot details (rank, name), reseeds MMR/RD from it and zeroes their W/L record. ` +
                             `Their Discord link is kept. This cannot be undone.`,
                         )
                     ) {
@@ -50,7 +50,7 @@ export function PlayerReset({ player }: { player: Player }) {
                     }
                 }}
             >
-                {reset.isPending ? 'Resetting…' : '♻️ Reset player'}
+                {reset.isPending ? 'Resetting...' : '♻️ Reset player'}
             </button>
             {summary && <span className="text-emerald-400">{summary}</span>}
             {reset.isError && <span className="text-rose-400">{apiErrorMessage(reset.error)}</span>}
@@ -83,7 +83,7 @@ export function DeletePlayer({ player }: { player: Player }) {
                     }
                 }}
             >
-                {del.isPending ? 'Deleting…' : '🗑️ Delete player'}
+                {del.isPending ? 'Deleting...' : '🗑️ Delete player'}
             </button>
             {del.isError && <span className="text-rose-400">{apiErrorMessage(del.error)}</span>}
         </div>
@@ -106,8 +106,8 @@ export function ServerReset() {
     const run = async () => {
         const list = players ?? [];
         if (list.length === 0) return;
-        if (!window.confirm(`Reset ALL ${list.length} players on this server? Each one's MMR/RD is re-seeded and W/L zeroed (Discord links and match history are kept). This cannot be undone.`)) return;
-        if (!window.confirm('Are you really sure? This re-fetches every Riot player one by one and can take a while.')) return;
+        if (!window.confirm(`Reset ALL ${list.length} players on this server? Each one's MMR/RD is reseeded and W/L zeroed (Discord links and match history are kept). This cannot be undone.`)) return;
+        if (!window.confirm('Are you really sure? This refetches every Riot player one by one and can take a while.')) return;
 
         cancelRef.current = false;
         setRunning(true);
@@ -135,7 +135,7 @@ export function ServerReset() {
             } catch (err) {
                 failed += 1;
                 lines.push(`❌ ${p.displayName}: ${apiErrorMessage(err)}`);
-                //A failure is often a 429 — back off a touch before the next one.
+                //A failure is often a 429: back off a touch before the next one.
                 if (processed < list.length && !cancelRef.current) await sleep(RIOT_PACE_MS);
             }
         }
@@ -157,16 +157,16 @@ export function ServerReset() {
         <div className="rounded-2xl border border-rose-900/40 bg-rose-950/10 p-5">
             <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-rose-300">Server reset</h3>
             <p className="mb-3 text-xs text-slate-400">
-                Resets EVERY player on this server: refetch Riot details, re-seed MMR/RD, zero the W/L
+                Resets EVERY player on this server: refetch Riot details, reseed MMR/RD, zero the W/L
                 record. Discord links and match history are kept. Runs one player at a time and paces the
-                Riot calls to respect the API limit — you can cancel midway (players already done stay reset).
+                Riot calls to respect the API limit. You can cancel midway (players already done stay reset).
             </p>
 
             {running ? (
                 <div className="flex flex-wrap items-center gap-3">
                     <span className="text-sm text-amber-300">
                         Resetting {progress?.done ?? 0}/{progress?.total ?? 0}
-                        {progress?.current ? ` — ${progress.current}` : ''}…
+                        {progress?.current ? `: ${progress.current}` : ''}...
                     </span>
                     <button
                         className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-400"

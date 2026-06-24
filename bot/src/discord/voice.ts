@@ -105,19 +105,19 @@ export async function createMatchChannels(
     teamBMemberIds: string[],
 ): Promise<CreatedChannels> {
     const gameComms = await guild.channels.create({
-        name: `🎙️ ${label} — Game`,
+        name: `🎙️ ${label}: Game`,
         type: ChannelType.GuildVoice,
         parent: parent.id,
         permissionOverwrites: lockOverwrites(guild, allMemberIds),
     });
     const teamA = await guild.channels.create({
-        name: `🏹 ${label} — Team A`,
+        name: `🏹 ${label}: Team A`,
         type: ChannelType.GuildVoice,
         parent: parent.id,
         permissionOverwrites: lockOverwrites(guild, teamAMemberIds),
     });
     const teamB = await guild.channels.create({
-        name: `🔪 ${label} — Team B`,
+        name: `🔪 ${label}: Team B`,
         type: ChannelType.GuildVoice,
         parent: parent.id,
         permissionOverwrites: lockOverwrites(guild, teamBMemberIds),
@@ -140,7 +140,7 @@ export async function moveMembers(
                 moved++;
             }
         } catch {
-        //not in voice, or not a member — skip
+        //not in voice, or not a member: skip
         }
     }
     return moved;
@@ -182,9 +182,9 @@ export interface FoundChannels {
     teamB?: VoiceChannel;
 }
 
-//Extract the match label from a managed channel name (e.g. "Funky Lobby — Team A" → "Funky Lobby"). */
+//Extract the match label from a managed channel name (e.g. "Funky Lobby: Team A" → "Funky Lobby"). */
 function labelFromChannelName(name: string): string | null {
-    const m = name.match(/^\S+ (.+) — (Game|Team A|Team B)$/u);
+    const m = name.match(/^\S+ (.+): (Game|Team A|Team B)$/u);
     return m ? m[1]! : null;
 }
 

@@ -46,9 +46,9 @@ export function errorHandler(
     res.status(422).json({ error: err.message });
     return;
   }
-  // Mongo duplicate key (re-upload attempt).
+  // Mongo duplicate key (reupload attempt).
   if (typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000) {
-    res.status(409).json({ error: 'This player has already been injected and cannot be re-uploaded.' });
+    res.status(409).json({ error: 'This player has already been injected and cannot be reuploaded.' });
     return;
   }
 

@@ -12,7 +12,7 @@ import type { MatchRecord, RosterEntry } from '../api/types';
 import { usePrivileged } from '../lib/usePrivileged';
 import { Card } from '../components/ui';
 
-//Compact button variant (smaller than the shared btnGhost) — Matches packs many per card.
+//Compact button variant (smaller than the shared btnGhost). Matches packs many per card.
 const btnGhost = 'rounded-lg border border-slate-700 px-3 py-1.5 text-xs font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
 
 /** A team's roster. Shows before→after + delta once confirmed, else the MMR at creation. */
@@ -143,7 +143,7 @@ function PendingCard({ m }: { m: MatchRecord }) {
                     }
                 }}
                 >
-                {cancel.isPending ? 'Cancelling…' : 'Cancel match'}
+                {cancel.isPending ? 'Cancelling...' : 'Cancel match'}
                 </button>
             )}
             <button
@@ -152,17 +152,17 @@ function PendingCard({ m }: { m: MatchRecord }) {
                 onClick={() => {
                     const warning =
                         m.status === 'inProgress'
-                            ? 'Delete this IN-PROGRESS match? This voids the game entirely (no MMR was applied) and removes it — normally you should Cancel or Confirm instead.'
+                            ? 'Delete this IN-PROGRESS match? This voids the game entirely (no MMR was applied) and removes it. Normally you should Cancel or Confirm instead.'
                             : 'Delete this proposed match? This removes it entirely.';
                     if (window.confirm(warning)) discard.mutate();
                 }}
             >
-                {discard.isPending ? 'Deleting…' : 'Delete match'}
+                {discard.isPending ? 'Deleting...' : 'Delete match'}
             </button>
             </div>
         ) : mine && m.status === 'pending' ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">
-            <p className="text-sm text-slate-500">Your proposal — awaiting the lobby/an admin.</p>
+            <p className="text-sm text-slate-500">Your proposal, awaiting the lobby/an admin.</p>
             <button
                 className={`${btnGhost} ml-auto border-rose-800/60 text-rose-300`}
                 disabled={discard.isPending}
@@ -170,13 +170,13 @@ function PendingCard({ m }: { m: MatchRecord }) {
                     if (window.confirm('Delete your proposal? You can propose a new match afterwards.')) discard.mutate();
                 }}
             >
-                {discard.isPending ? 'Deleting…' : 'Delete my proposal'}
+                {discard.isPending ? 'Deleting...' : 'Delete my proposal'}
             </button>
             </div>
         ) : (
             <p className="mt-4 text-sm text-slate-500">
             {m.status === 'inProgress'
-                ? 'Being played on Discord — confirm or cancel it from there (or as an admin).'
+                ? 'Being played on Discord. Confirm or cancel it from there (or as an admin).'
                 : 'Awaiting an admin to confirm the winner.'}
             </p>
         )}
@@ -230,13 +230,13 @@ function HistoryCard({ m }: { m: MatchRecord }) {
             </span>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row">
-            <TeamSide team={m.teamA} label={`Team A${m.winner === 'A' ? ' — won' : ''}`} highlight={highlight('A')} />
-            <TeamSide team={m.teamB} label={`Team B${m.winner === 'B' ? ' — won' : ''}`} highlight={highlight('B')} />
+            <TeamSide team={m.teamA} label={`Team A${m.winner === 'A' ? ' (won)' : ''}`} highlight={highlight('A')} />
+            <TeamSide team={m.teamB} label={`Team B${m.winner === 'B' ? ' (won)' : ''}`} highlight={highlight('B')} />
         </div>
 
         {reversed ? (
             <p className="mt-3 text-xs text-rose-300/80">
-            MMR changes undone{m.reversedByActor ? ` by ${m.reversedByActor}` : ''} — kept for the record.
+            MMR changes undone{m.reversedByActor ? ` by ${m.reversedByActor}` : ''}, kept for the record.
             </p>
         ) : privileged ? (
             <div className="mt-3 flex items-center gap-3">
@@ -253,7 +253,7 @@ function HistoryCard({ m }: { m: MatchRecord }) {
                 }
                 }}
             >
-                {reverse.isPending ? 'Reversing…' : 'Reverse result'}
+                {reverse.isPending ? 'Reversing...' : 'Reverse result'}
             </button>
             {reverse.isError && <span className="text-xs text-rose-400">{apiErrorMessage(reverse.error)}</span>}
             </div>
@@ -274,7 +274,7 @@ export default function MatchesPage() {
                 : false,
     });
 
-    if (isLoading) return <Card>Loading match history…</Card>;
+    if (isLoading) return <Card>Loading match history...</Card>;
     if (isError) return <Card><span className="text-rose-400">{apiErrorMessage(error)}</span></Card>;
     if (!data || data.length === 0)
         return (

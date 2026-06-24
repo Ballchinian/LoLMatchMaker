@@ -67,7 +67,7 @@ async function start(): Promise<void> {
   */
   if (isProduction && !writesProtected) {
     console.error(
-      '[boot] FATAL: NODE_ENV=production but no ADMIN_TOKEN/BOT_TOKEN set — refusing to start in open mode.',
+      '[boot] FATAL: NODE_ENV=production but no ADMIN_TOKEN/BOT_TOKEN set. Refusing to start in open mode.',
     );
     process.exit(1);
   }
@@ -77,7 +77,7 @@ async function start(): Promise<void> {
     startReaper();
   } catch (err) {
     console.error('[boot] could not connect to MongoDB:', (err as Error).message);
-    console.error('[boot] starting anyway — set MONGODB_URI in server/.env and restart.');
+    console.error('[boot] starting anyway. Set MONGODB_URI in server/.env and restart.');
   }
 
   app.listen(env.PORT, () => {
@@ -88,7 +88,7 @@ async function start(): Promise<void> {
       console.log('[server] write protection: ON (admin/bot token required for writes)');
     } else {
       console.warn(
-        '[server] ⚠ write protection: OFF — anyone can inject/tag/record. Set ADMIN_TOKEN before sharing!',
+        '[server] ⚠ write protection: OFF. Anyone can inject/tag/record. Set ADMIN_TOKEN before sharing!',
       );
     }
   });

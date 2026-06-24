@@ -7,7 +7,7 @@ interface SelectionState {
     selectedIds: string[];
     sameTeam: Pair[];
     oppositeTeam: Pair[];
-    //Canonical keys of splits already shown, so re-rolls avoid repeats.
+    //Canonical keys of splits already shown, so rerolls avoid repeats.
     excludeKeys: string[];
 
     toggle: (id: string) => void;

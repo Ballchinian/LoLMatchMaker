@@ -5,7 +5,7 @@ import { currentRD } from '../services/glicko';
 
 /**
  * A Player is append-only once injected:
- *  - `uniqueKey` carries a unique index, so the same person can't be re-uploaded.
+ *  - `uniqueKey` carries a unique index, so the same person can't be reuploaded.
  *  - Seed/identity fields are marked `immutable`, so they can't be edited or "reset".
  *  - Only the live ladder fields (mmr, wins, losses, gamesPlayed) change, and only
  *    through the match-recording flow.
@@ -47,7 +47,7 @@ export interface PlayerAttrs {
   seedMMR: number;
   mmr: number;
   /**
-   * Glicko rating deviation — how unsure the system is about `mmr`. Set at
+   * Glicko rating deviation: how unsure the system is about `mmr`. Set at
    * injection from the seed curve, shrinks each game, grows with inactivity.
    * Absent on players injected before Glicko; backfilled lazily from history.
    */
@@ -65,7 +65,7 @@ export interface PlayerAttrs {
   discordUserId?: string;
   /**
    * Provenance: Discord id of whoever created this entry (the bot's /link). Null
-   * for admin/website injects. Lightweight audit only — not a security control.
+   * for admin/website injects. Lightweight audit only, not a security control.
    */
   addedBy?: string | null;
 }
@@ -93,7 +93,7 @@ export interface PublicPlayer {
   gamesPlayed: number;
   tags: string[];
   champPool: ChampPool;
-  /** Champ-pool modifier: -200 … 0. */
+  /** Champ-pool modifier: -200 ... 0. */
   mmrModifier: number;
   /** Adjusted MMR (mmr + modifier): shown to users and used for balancing. Ranks use raw mmr. */
   effectiveMmr: number;
@@ -147,7 +147,7 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     // Which Discord server (tenant) owns this player. Frozen at injection.
     guildId: { type: String, default: null, index: true, immutable: true },
 
-    // Unique, frozen identity — prevents re-upload of the same player.
+    // Unique, frozen identity: prevents reupload of the same player.
     // Guild-scoped entries embed their guildId (e.g. "1234:riot:<puuid>"), so the
     // same person can exist on two different servers without colliding.
     uniqueKey: { type: String, required: true, unique: true, immutable: true },
@@ -174,7 +174,7 @@ const playerSchema = new Schema<PlayerAttrs, PlayerModel, PlayerMethods>(
     losses: { type: Number, default: 0 },
     gamesPlayed: { type: Number, default: 0 },
 
-    // Mutable organizational labels — NOT part of the immutable identity.
+    // Mutable organizational labels: NOT part of the immutable identity.
     tags: { type: [String], default: [] },
 
     // Versatility (mutable; set at /link signup or via /update / the admin UI).

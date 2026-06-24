@@ -14,7 +14,7 @@ import { ApiError, asyncHandler } from './errors';
  *  - BOT_TOKEN    -> 'bot' (the Discord bot; names its guild via X-Guild-Id)
  *  - gs1.* tokens -> per-server 'admin' (issued by /api/auth server-login,
  *                    scoped to the guild baked into the token, and only valid
- *                    while the token's version matches the server's — rotating
+ *                    while the token's version matches the server's; rotating
  *                    the password bumps the version and logs old sessions out)
  *
  * Scope (which server's data a request sees) resolves from, in order: the
@@ -67,7 +67,7 @@ function extractToken(req: Request): string | null {
 
 /**
  * Cheap (no DB) credential parse: matches the static tokens, or HMAC-verifies a
- * server token. The server token's version is NOT yet validated here — that
+ * server token. The server token's version is NOT yet validated here. That
  * needs a DB lookup (see authenticate).
  */
 function identifyToken(req: Request): Identity | null {
@@ -116,7 +116,7 @@ export const requireWriter = asyncHandler(async (req: Request, _res: Response, n
   }
   const id = await authenticate(req);
   if (!id) {
-    next(new ApiError(401, 'Unauthorized — admin or bot token required for this action.'));
+    next(new ApiError(401, 'Unauthorized: admin or bot token required for this action.'));
     return;
   }
   req.actor = id.actor;
@@ -173,7 +173,7 @@ export const resolveScope = asyncHandler(async (req, _res, next) => {
 
 /*
     Mark a server active on writes so the reaper can tell live servers from dead
-    ones. GETs (browsing, the bot's sweep) don't count — only mutations and
+    ones. GETs (browsing, the bot's sweep) don't count: only mutations and
     logins do, which is exactly the activity that needs the bot to keep sweeping.
 */
 function bumpActivity(req: Request): void {

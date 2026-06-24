@@ -12,7 +12,7 @@ export function TagPicker({
 }: {
     value: string[];
     onChange: (tags: string[]) => void;
-    //Every distinct tag in the roster — the pick-from list.
+    //Every distinct tag in the roster: the pick-from list.
     allTags: string[];
 }) {
     const [creating, setCreating] = useState(false);
@@ -61,7 +61,7 @@ export function TagPicker({
                 className="rounded-full border border-dashed border-slate-700 bg-slate-950 px-2 py-0.5 text-xs text-slate-400 outline-none focus:border-indigo-500"
                 title="Apply an existing tag"
             >
-                <option value="">+ tag…</option>
+                <option value="">+ tag...</option>
                 {applicable.map((t) => (
                     <option key={t} value={t}>
                         {t}

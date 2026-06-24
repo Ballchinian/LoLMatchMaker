@@ -95,7 +95,7 @@ export const apiDeleteMatch = (guildId: string, id: string) =>
 
 /*
     Ask the server to find the played custom game in Riot match history.
-    null = couldn't tell (customs aren't guaranteed to be indexed) — ask the humans.
+    null = couldn't tell (customs aren't guaranteed to be indexed). Ask the humans.
     Generous timeout: the server fans out several Riot API calls.
 */
 export const apiDetectWinner = (guildId: string, id: string) =>

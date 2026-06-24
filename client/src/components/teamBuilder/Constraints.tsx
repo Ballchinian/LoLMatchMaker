@@ -25,7 +25,7 @@ export function Constraints({ byId }: { byId: Map<string, Player> }) {
             <>
             <div className="flex flex-wrap items-center gap-2">
                 <select className={selectCls} value={a} onChange={(e) => setA(e.target.value)}>
-                    <option value="">Player A…</option>
+                    <option value="">Player A...</option>
                     {options.map((id) => (
                         <option key={id} value={id}>
                         {name(id)}
@@ -33,7 +33,7 @@ export function Constraints({ byId }: { byId: Map<string, Player> }) {
                     ))}
                 </select>
                 <select className={selectCls} value={b} onChange={(e) => setB(e.target.value)}>
-                    <option value="">Player B…</option>
+                    <option value="">Player B...</option>
                     {options.map((id) => (
                         <option key={id} value={id}>
                         {name(id)}
@@ -60,7 +60,7 @@ export function Constraints({ byId }: { byId: Map<string, Player> }) {
                 </Chip>
                 ))}
                 {sameTeam.length === 0 && oppositeTeam.length === 0 && (
-                <p className="text-sm text-slate-500">No constraints — fully free balancing.</p>
+                <p className="text-sm text-slate-500">No constraints, fully free balancing.</p>
                 )}
             </div>
             </>

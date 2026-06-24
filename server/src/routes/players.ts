@@ -104,7 +104,7 @@ function playerFromRiotProfile(profile: RiotProfile, guildId: string | null) {
 
 /* -------------------------------- routes ------------------------------- */
 
-/** GET /api/players — this server's players, strongest first. Public within scope. */
+/** GET /api/players: this server's players, strongest first. Public within scope. */
 playersRouter.get(
   '/',
   asyncHandler(async (req, res) => {
@@ -128,7 +128,7 @@ const searchSchema = z.object({
 });
 
 /**
- * POST /api/players/search — preview a Riot player WITHOUT saving.
+ * POST /api/players/search: preview a Riot player WITHOUT saving.
  * Lets the UI show what will be injected (and whether they already exist).
  */
 playersRouter.post(
@@ -136,7 +136,7 @@ playersRouter.post(
   requireWriter,
   asyncHandler(async (req, res) => {
     if (!riotEnabled) {
-      throw new ApiError(503, 'Player search is disabled — no Riot API key configured on the server.');
+      throw new ApiError(503, 'Player search is disabled. No Riot API key configured on the server.');
     }
     const { gameName, tagLine } = searchSchema.parse(req.body);
     const profile = await lookupByRiotId(gameName, tagLine);
@@ -158,7 +158,7 @@ playersRouter.post(
 
 // Provenance: the Discord id of whoever created this entry (the bot's /link passes
 // the invoker). Null for admin/website injects. Lightweight audit, not a security
-// control — the bot's 1:1 Discord↔player link is what bounds self-onboarding.
+// control: the bot's 1:1 Discord↔player link is what bounds self-onboarding.
 const addedByField = z.string().max(32).optional();
 
 const manualSchema = z.object({
@@ -188,8 +188,8 @@ const riotInjectSchema = z.object({
 const injectSchema = z.discriminatedUnion('source', [manualSchema, riotInjectSchema]);
 
 /**
- * POST /api/players — inject a player (append-only).
- * Riot players are re-fetched fresh; manual players seed from a rank or raw MMR.
+ * POST /api/players: inject a player (append-only).
+ * Riot players are refetched fresh; manual players seed from a rank or raw MMR.
  * Duplicate uniqueKey -> 409 (handled by the error middleware).
  */
 playersRouter.post(
@@ -202,7 +202,7 @@ playersRouter.post(
     let attrs;
     if (body.source === 'riot') {
       if (!riotEnabled) {
-        throw new ApiError(503, 'Riot injection is disabled — no Riot API key configured on the server.');
+        throw new ApiError(503, 'Riot injection is disabled. No Riot API key configured on the server.');
       }
       const profile = await lookupByRiotId(body.gameName, body.tagLine);
       attrs = playerFromRiotProfile(profile, guildId);
@@ -222,7 +222,7 @@ playersRouter.post(
         region,
         seedMMR,
         mmr: seedMMR,
-        // No ranked-activity data behind a manual entry — full uncertainty.
+        // No ranked-activity data behind a manual entry: full uncertainty.
         rd: seedRD(null),
       };
     }
@@ -230,7 +230,7 @@ playersRouter.post(
     // Pre-check for a friendlier message than the raw duplicate-key error.
     const existing = await Player.findOne({ uniqueKey: attrs.uniqueKey }).exec();
     if (existing) {
-      throw new ApiError(409, 'This player has already been injected and cannot be re-uploaded.');
+      throw new ApiError(409, 'This player has already been injected and cannot be reuploaded.');
     }
 
     const player = await Player.create({
@@ -247,7 +247,7 @@ const updateTagsSchema = z.object({
 });
 
 /**
- * PATCH /api/players/:id/tags — replace a player's tags.
+ * PATCH /api/players/:id/tags: replace a player's tags.
  * Tags are mutable metadata; this does NOT touch the immutable identity/seed/MMR.
  */
 playersRouter.patch(
@@ -273,7 +273,7 @@ const mmrSchema = z
   });
 
 /**
- * PATCH /api/players/:id/mmr — admin override of a player's seed, current MMR
+ * PATCH /api/players/:id/mmr: admin override of a player's seed, current MMR
  * and/or rating uncertainty (rd). Identity stays immutable.
  */
 playersRouter.patch(
@@ -297,7 +297,7 @@ const rolesSchema = z.object({
 });
 
 /**
- * PATCH /api/players/:id/roles — set a player's champion-pool depth, which
+ * PATCH /api/players/:id/roles: set a player's champion-pool depth, which
  * adjusts the displayed/balancing MMR (one-trick -200, two-trick -75,
  * diverse 0). Raw MMR, ranks and Glicko are untouched. (Route name kept for
  * the bot's existing /link call.)
@@ -319,7 +319,7 @@ const discordLinkSchema = z.object({
 });
 
 /**
- * PATCH /api/players/:id/discord — link (or unlink with null) a Discord user id.
+ * PATCH /api/players/:id/discord: link (or unlink with null) a Discord user id.
  * Used by the bot to map a site player to a Discord member. One Discord id ↔ one player.
  */
 playersRouter.patch(
@@ -384,7 +384,7 @@ function resetView(p: PlayerDoc): ResetView {
 
 /*
     Reset a player's attached Riot details and ladder state WITHOUT touching the
-    Discord link: riot players are re-fetched (fresh rank snapshot + re-seeded
+    Discord link: riot players are refetched (fresh rank snapshot + reseeded
     MMR/RD), manual players fall back to their seed. W/L/games restart at zero.
     Identity fields are schema-immutable, so the update opts into
     overwriteImmutable for the refreshed snapshot.
@@ -433,11 +433,11 @@ async function performReset(player: PlayerDoc): Promise<{ before: ResetView; aft
 /*
     Server reset (resetting EVERY player) is driven CLIENT-side, one call to
     /:id/reset per player: that lets the website show live progress, pace the
-    Riot calls (dev keys rate-limit hard — the lookup throws 429), and offer a
+    Riot calls (dev keys rate-limit hard, the lookup throws 429), and offer a
     Cancel button mid-run. So there's deliberately no bulk reset-all route.
 */
 
-/** POST /api/players/:id/reset — PLAYER RESET: one player, same semantics. Admin/bot. */
+/** POST /api/players/:id/reset: PLAYER RESET: one player, same semantics. Admin/bot. */
 playersRouter.post(
   '/:id/reset',
   requireWriter,
@@ -450,7 +450,7 @@ playersRouter.post(
 );
 
 /**
- * DELETE /api/players/:id — permanently remove a player (admin/bot).
+ * DELETE /api/players/:id: permanently remove a player (admin/bot).
  * Blocked while they're in an OPEN match (resolve those first); confirmed
  * history keeps its own displayName/MMR snapshots, so it's unaffected.
  * (The bot's /unlink uses this to delete an unplayed self-added player.)

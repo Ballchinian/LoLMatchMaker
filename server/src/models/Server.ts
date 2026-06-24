@@ -21,7 +21,7 @@ export interface ServerAttrs {
       out every existing website admin session.
   */
   tokenVersion: number;
-  //Last real activity (login, match write, command) — drives the dead-server reaper
+  //Last real activity (login, match write, command): drives the dead-server reaper
   lastActiveAt: Date;
 }
 
