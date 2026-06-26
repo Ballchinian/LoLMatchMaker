@@ -1,6 +1,6 @@
 # League Match Maker
 
-A Discord bot and website for running League of Legends inhouses. It links your Riot account, builds balanced teams from the data, keeps track of how everyone's doing over time, and handles the tedious lobby admin, making voice channels, shuffling people into teams, and recording who won.
+A Discord bot and website for running League of Legends inhouses. It links your Riot account, builds balanced teams from the data, keeps track of how everyone's doing over time, and handles the tedious lobby admin: making voice channels, shuffling people into teams, and recording who won.
 
 ## Features
 
@@ -12,17 +12,17 @@ A Discord bot and website for running League of Legends inhouses. It links your 
 - Auto-assigned Discord rank roles
 - Multi-server support, fully isolated per server
 - Players can propose their own matches
-- Admin / moderation tools
+- Admin and moderation tools
 
 Endpoint docs live in [ENDPOINTS.md](./ENDPOINTS.md).
 
-## How ratings work
+## How it works
 
-Each player has two numbers. The MMR is the system's guess at your skill, and the RD (rating deviation) is how confident it is in that guess. Lower RD means more certain. The easiest way to read RD is as a ± on your MMR: a new player might be 1500 ± 250, while a regular sits closer to 1500 ± 75.
+Each player carries two numbers. The MMR is the system's guess at your skill, and the RD (rating deviation) is how sure it is about that guess. Lower RD means more certain. The easiest way to read RD is as a ± on your MMR: a new player might be 1500 ± 250, while a regular sits closer to 1500 ± 75.
 
 ### Seeding a new player
 
-When you link a Riot account we pull your ranked data for a starting MMR, then adjust it by your current-season win rate. That adjustment caps at around ±400 (roughly a full tier), but you only get the full swing with a decent sample behind it. Around 70% over 30 games earns the +400; five games barely register. Manual players just start from whatever rating an admin gives them.
+When you link a Riot account we pull your ranked data for a starting MMR, then nudge it by your current-season win rate. That nudge caps at around ±400 (roughly a full tier), but you only get the full swing with a decent sample behind it. Around 70% over 30 games earns the +400; five games barely register. Manual players just start from whatever rating an admin hands them.
 
 ### Starting confidence
 
@@ -38,15 +38,15 @@ The more ranked games you've played this season, the lower your starting RD:
 
 ### After a match
 
-Winners gain MMR, losers lose it. How much you move depends on two things: how surprising the result was (upsets shift everyone more), and how high your RD is (if the system's still learning you, it adjusts harder). The more you play, the lower your RD gets, so your rating settles down and stops swinging around. Established players barely move game to game, which is the whole idea.
+Winners gain MMR, losers lose it. How far you move comes down to two things: how surprising the result was (upsets shift everyone more), and how high your RD is (if the system's still learning you, it adjusts harder). The more you play, the lower your RD gets, so your rating settles and stops swinging around. Established players barely move game to game, which is the whole idea.
 
 ### Coming back from a break
 
-If you stop playing for a while, your RD slowly climbs back up. So when you return you'll see bigger rating swings for the first few games while it recalibrates. That's expected, not the system being broken.
+Stop playing for a while and your RD slowly climbs back up, so when you return you'll see bigger swings for the first few games while it recalibrates. That's expected, not the system being broken.
 
 ## Discord
 
-Each server runs independently. The bot takes care of account linking, match setup, team voice channels, rank role syncing, result reporting, and onboarding. Nothing is shared between guilds, each server's data stays in that server.
+Each server runs on its own. The bot handles account linking, match setup, team voice channels, rank role syncing, result reporting, and onboarding. Nothing is shared between guilds: each server's data stays in that server.
 
 ### Player commands
 
@@ -70,13 +70,20 @@ Each server runs independently. The bot takes care of account linking, match set
 
 ## Match lifecycle
 
-Matches go through three stages.
+A match moves through three stages.
 
 A **proposed** match has been created but hasn't started. The proposer can delete their own, and admins can delete any of them.
 
-Once it's **in progress**, everyone has to be in the lobby, and nobody can be in two active matches at the same time. If something goes wrong you can cancel it, which knocks it back to proposed.
+Once it's **in progress**, everyone has to be in the lobby, and nobody can sit in two active matches at once. If something goes wrong you can cancel it, which knocks it back to proposed.
 
-A **confirmed** match is done. Ratings get applied, it's saved to match history, and Discord rank roles sync up automatically.
+A **confirmed** match is done. Ratings get applied, it's saved to match history, and Discord rank roles sync up on their own.
+
+## Tech stack
+
+- **Discord bot** for the match and account commands
+- **A website** for team balancing and stats
+- **A database** holding players, matches, and ratings
+- **The Riot API** for ranked seeding and result confirmation
 
 ## A typical match
 
