@@ -6,11 +6,11 @@ A Discord bot and website for running League of Legends inhouses. It links your 
 
 - Riot account linking, with ratings seeded from ranked
 - Team balancing that adapts as it learns who's actually carrying
-- Glicko-style ratings (an MMR plus an uncertainty value)
-- Match history and per-player stats
+- Glicko style ratings (an MMR plus an uncertainty value)
+- Match history and per player stats
 - Voice channel automation for matches
-- Auto-assigned Discord rank roles
-- Multi-server support, fully isolated per server
+- Auto assigned Discord rank roles
+- Multi server support, fully isolated per server
 - Players can propose their own matches
 - Admin and moderation tools
 
@@ -22,7 +22,7 @@ Each player carries two numbers. The MMR is the system's guess at your skill, an
 
 ### Seeding a new player
 
-When you link a Riot account we pull your ranked data for a starting MMR, then nudge it by your current-season win rate. That nudge caps at around ±400 (roughly a full tier), but you only get the full swing with a decent sample behind it. Around 70% over 30 games earns the +400; five games barely register. Manual players just start from whatever rating an admin hands them.
+When you link a Riot account we pull your ranked data for a starting MMR, then nudge it by your current season win rate. That nudge caps at around ±400 (roughly a full tier), but you only get the full swing with a decent sample behind it. Around 70% over 30 games earns the +400; five games barely register. Manual players just start from whatever rating an admin hands them.
 
 ### Starting confidence
 
