@@ -277,7 +277,10 @@ Delete a match.
 
 # Discord Command Queue
 
-Used by the website to request Discord actions from the bot.
+Used by the website to request Discord actions from the bot. The server also
+enqueues a `cleanup` command itself when a website-side confirm/cancel/delete
+ends an in-progress match, so the bot returns the players to the lobby and
+removes the match channels right away.
 
 ## POST `/api/bot-commands` 🔒
 

@@ -76,7 +76,7 @@ A **proposed** match has been created but hasn't started. The proposer can delet
 
 Once it's **in progress**, everyone has to be in the lobby, and nobody can sit in two active matches at once. If something goes wrong you can cancel it, which knocks it back to proposed.
 
-A **confirmed** match is done. Ratings get applied, it's saved to match history, and Discord rank roles sync up on their own.
+A **confirmed** match is done. Ratings get applied, it's saved to match history, and Discord rank roles sync up on their own. Whether it's confirmed from Discord or the website, everyone is returned to the lobby and the match channels are removed.
 
 ## Tech stack
 
