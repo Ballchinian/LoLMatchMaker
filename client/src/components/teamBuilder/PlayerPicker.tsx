@@ -53,7 +53,7 @@ export function PlayerPicker({ players }: { players: Player[] }) {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search name..."
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-500"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-base text-slate-100 outline-none focus:border-indigo-500 sm:text-sm"
                 />
                 <TagFilterBar players={players} selected={filter} onToggle={toggleFilter} onClear={() => setFilter(new Set())} />
             </div>

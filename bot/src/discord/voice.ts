@@ -32,11 +32,27 @@ export async function ensureLobbyChannel(guild: Guild): Promise<VoiceChannel> {
     const existing = findLobbyChannel(guild);
     if (existing) return existing;
     const category = await ensureCategory(guild);
+    /*
+        Unlike match channels, Lobby stays open to everyone, but the bot still
+        needs an explicit grant: it's the DESTINATION of every return-to-Lobby
+        move, and without Connect + Move Members here those moves fail silently
+        if the bot's guild role is ever missing them.
+    */
+    const meId = guild.members.me?.id;
     return guild.channels.create({
         name: config.LOBBY_CHANNEL_NAME,
         type: ChannelType.GuildVoice,
         parent: category.id,
         reason: 'Match Maker lobby channel',
+        permissionOverwrites: meId
+            ? [
+                  {
+                      id: meId,
+                      type: OverwriteType.Member,
+                      allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect, PermissionFlagsBits.MoveMembers],
+                  },
+              ]
+            : undefined,
     });
 }
 
@@ -133,14 +149,18 @@ export async function moveMembers(
 ): Promise<number> {
     let moved = 0;
     for (const id of memberIds) {
+        //Not in the guild / not in voice is normal: nothing to move.
+        const member = await guild.members.fetch(id).catch(() => null);
+        if (!member?.voice.channelId) continue;
         try {
-            const member = await guild.members.fetch(id);
-            if (member.voice.channelId) {
-                await member.voice.setChannel(channelId);
-                moved++;
-            }
-        } catch {
-        //not in voice, or not a member: skip
+            await member.voice.setChannel(channelId);
+            moved++;
+        } catch (err) {
+            //A real move failure (permissions, rate limit) must be visible in the logs.
+            console.warn(
+                `[voice] couldn't move ${member.user.tag} to channel ${channelId} in ${guild.name}:`,
+                err instanceof Error ? err.message : err,
+            );
         }
     }
     return moved;
@@ -209,12 +229,21 @@ export async function sweepOrphanedChannels(
         return label !== null && !activeLabels.has(label);
     });
     if (orphaned.length === 0) return 0;
+    console.log(
+        `[sweep] ${guild.name}: ${orphaned.length} orphaned channel(s): ${orphaned.map((c) => c.name).join(', ')}`,
+    );
 
-    const lobby = findLobbyChannel(guild);
+    //Recreate a deleted/renamed Lobby rather than silently disconnecting people.
+    const lobby = await ensureLobbyChannel(guild).catch((err) => {
+        console.warn(`[sweep] ${guild.name}: no Lobby and couldn't create one:`, err instanceof Error ? err.message : err);
+        return null;
+    });
     if (lobby) {
+        let moved = 0;
         for (const ch of orphaned) {
-        await moveMembers(guild, [...ch.members.keys()], lobby.id);
+        moved += await moveMembers(guild, [...ch.members.keys()], lobby.id);
         }
+        if (moved > 0) console.log(`[sweep] ${guild.name}: returned ${moved} member(s) to Lobby`);
     }
     const { deleted } = await deleteChannels(
         guild,

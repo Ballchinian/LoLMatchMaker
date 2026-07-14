@@ -158,7 +158,7 @@ export const apiPurgeServer = (guildId: string) =>
 export interface ApiBotCommand {
     _id: string;
     guildId: string | null;
-    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete';
+    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete' | 'cleanup';
     match: string;
     matchLabel: string;
     winner?: 'A' | 'B';

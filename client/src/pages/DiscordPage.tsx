@@ -31,6 +31,7 @@ const ACTION_LABEL: Record<BotCommandRecord['action'], string> = {
     cancel: 'Cancel (back to proposed)',
     confirm: 'Confirm winner',
     delete: 'Delete match',
+    cleanup: 'Return players to Lobby',
 };
 
 const STATUS_BADGE: Record<BotCommandRecord['status'], string> = {

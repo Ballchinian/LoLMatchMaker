@@ -4,7 +4,8 @@ import { apiErrorMessage, lookupServer, serverLogin, verifyToken } from '../api/
 import { useAuth } from '../store/useAuth';
 
 //px-3 -> px-2, py-2 -> py-1.5 compared to OG inputCls
-const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-sm text-slate-100 outline-none focus:border-indigo-500';
+//text-base below sm: anything under 16px makes iOS Safari auto-zoom on focus.
+const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-base text-slate-100 outline-none focus:border-indigo-500 sm:text-sm';
 
 /*
     Header control for per server access:
@@ -133,7 +134,12 @@ export function AuthControl() {
         </div>
 
         {open && (
-            <div className="absolute right-0 z-10 mt-2 w-72 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl">
+            /*
+                Phones: the header wraps, so a dropdown anchored to the button can
+                hang off the screen edge, fix it to the viewport instead. sm+ keeps
+                the anchored dropdown.
+            */
+            <div className="fixed inset-x-3 top-24 z-50 rounded-xl border border-slate-700 bg-slate-900 p-3 shadow-xl sm:absolute sm:inset-x-auto sm:right-0 sm:top-auto sm:z-10 sm:mt-2 sm:w-72">
                 {serverKey ? (
                     <p className="mb-2 text-xs text-slate-400">
                     Connected to <span className="font-semibold text-indigo-300">{serverName ?? 'this server'}</span>.

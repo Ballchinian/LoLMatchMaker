@@ -18,5 +18,6 @@ export const btnPrimary = 'rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semib
 
 export const btnGhost = 'rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 disabled:opacity-50';
 
-//Full-width text input / select styling. 
-export const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-indigo-500';
+//Full-width text input / select styling. text-base below sm: anything under
+//16px makes iOS Safari auto-zoom on focus.
+export const inputCls = 'w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-slate-100 outline-none focus:border-indigo-500 sm:text-sm';

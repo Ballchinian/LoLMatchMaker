@@ -2,6 +2,7 @@ import { ChannelType, ThreadAutoArchiveDuration, type Guild, type TextChannel } 
 import {
     apiConfirmMatch,
     apiDeleteMatch,
+    apiGetMatches,
     apiStartMatch,
     apiStopMatch,
     type ApiMatch,
@@ -12,7 +13,7 @@ import {
     createMatchChannels,
     deleteChannels,
     ensureCategory,
-    findLobbyChannel,
+    ensureLobbyChannel,
     findMatchChannels,
     moveMembers,
 } from '../discord/voice';
@@ -86,18 +87,46 @@ export async function deleteMatchThread(guild: Guild, label: string): Promise<vo
     for (const t of threads) await t.delete().catch(() => undefined);
 }
 
-//Return players to Lobby (if it exists) and delete the match's channels + chat thread
+/*
+    Return players to Lobby and delete the match's channels + chat thread.
+    Moves the match's linked players PLUS anyone actually sitting in the match
+    channels (spectating admins would otherwise be disconnected when the
+    channels die). Recreates a missing Lobby rather than silently skipping the
+    move, and reports the real moved count so failures aren't invisible.
+*/
 async function teardown(guild: Guild, memberIds: string[], label: string) {
-    const lobby = findLobbyChannel(guild);
+    const found = findMatchChannels(guild, label);
+    //No channels (never set up, or already gone): nobody to move, nothing to delete.
+    if (found.all.length === 0) {
+        await deleteMatchThread(guild, label);
+        console.log(`[teardown] ${label} in ${guild.name}: no match channels found`);
+        return { deleted: 0, errors: [] as string[], moved: 0 };
+    }
+    const ids = new Set(memberIds);
+    for (const ch of found.all) for (const id of ch.members.keys()) ids.add(id);
+
+    let moved = 0;
+    const lobby = await ensureLobbyChannel(guild).catch((err) => {
+        console.warn(`[teardown] ${label}: no Lobby and couldn't create one:`, err instanceof Error ? err.message : err);
+        return null;
+    });
     if (lobby) {
-        await moveMembers(guild, memberIds, lobby.id);
+        moved = await moveMembers(guild, [...ids], lobby.id);
     }
     await deleteMatchThread(guild, label);
-    const found = findMatchChannels(guild, label);
-    return deleteChannels(
+    const del = await deleteChannels(
         guild,
         found.all.map((c) => c.id),
     );
+    console.log(`[teardown] ${label} in ${guild.name}: moved ${moved} member(s) to Lobby, deleted ${del.deleted}/${found.all.length} channel(s)`);
+    return { ...del, moved };
+}
+
+//Website-side confirm/cancel/delete cleanup: teardown by label + return the outcome message.
+//Works from the label snapshot alone, so it survives the match being deleted.
+export async function runCleanup(guild: Guild, label: string, memberIds: string[]): Promise<string> {
+    const { moved, deleted, errors } = await teardown(guild, memberIds, label);
+    return withErrors(`✔️ Cleaned up **${label}**: returned ${moved} member(s) to Lobby, removed ${deleted} channel(s).`, errors);
 }
 
 //Append a warning to a reply if some channels couldn't be deleted (e.g. missing perms)
@@ -191,7 +220,24 @@ export async function performAction(
 
     if (sub === 'confirm') {
         if (winner !== 'A' && winner !== 'B') return '❌ No winner specified.';
-        const updated = await apiConfirmMatch(guild.id, match._id, winner); //applies MMR; match -> confirmed
+        let updated: ApiPlayer[];
+        try {
+            updated = await apiConfirmMatch(guild.id, match._id, winner); //applies MMR; match -> confirmed
+        } catch (err) {
+            /*
+                The API may have confirmed the match even though this call failed
+                (timeout mid-request, or it was already confirmed from the website).
+                Bailing here used to strand the channels until the sweep, so refetch:
+                if the match IS confirmed, keep going and tear down anyway.
+            */
+            const fresh = (await apiGetMatches(guild.id).catch(() => [] as ApiMatch[])).find((m) => m._id === match._id);
+            if (fresh?.status !== 'confirmed') {
+                console.warn(`[confirm] ${label} in ${guild.name}: confirm failed, match not confirmed:`, (err as Error).message);
+                return `❌ Couldn't confirm ${label}: ${(err as Error).message}`;
+            }
+            console.warn(`[confirm] ${label} in ${guild.name}: confirm call failed but the match IS confirmed; tearing down anyway:`, (err as Error).message);
+            updated = [];
+        }
 
         //Resync rank roles for participants whose MMR (and maybe rank) just changed.
         for (const p of updated) {
@@ -200,22 +246,27 @@ export async function performAction(
         if (m) await syncMemberRoles(guild, m, p.rank.tier).catch(() => undefined);
         }
 
-        const { deleted, errors } = await teardown(guild, allLinked, label);
+        const { moved, deleted, errors } = await teardown(guild, allLinked, label);
         return withErrors(
-        `✔️ Confirmed. Team ${winner} won, MMR updated (rank roles synced). Returned players to Lobby and removed ${deleted} channel(s).`,
+        `✔️ Confirmed. Team ${winner} won, MMR updated (rank roles synced). Returned ${moved} player(s) to Lobby and removed ${deleted} channel(s).`,
         errors,
         );
+    }
+
+    if (sub === 'cleanup') {
+        //Server-enqueued after a website-side confirm/cancel/delete of an active game.
+        return runCleanup(guild, label, allLinked);
     }
 
     if (sub === 'cancel') {
         if (match.status !== 'inProgress') {
         return `⚠️ ${label} is **${match.status}**. Only an in-progress game can be cancelled (use \`/match delete\` to remove a proposal).`;
         }
-        const { deleted, errors } = await teardown(guild, allLinked, label);
+        const { moved, deleted, errors } = await teardown(guild, allLinked, label);
         //Back to pending: the match can be reviewed, restarted, or deleted later
         await apiStopMatch(guild.id, match._id).catch(() => undefined);
         return withErrors(
-        `✔️ Cancelled. Returned players to Lobby and removed ${deleted} channel(s). ` +
+        `✔️ Cancelled. Returned ${moved} player(s) to Lobby and removed ${deleted} channel(s). ` +
             'The match is back to **proposed**, so it can be set up again or deleted.',
         errors,
         );
@@ -228,10 +279,10 @@ export async function performAction(
         } catch (err) {
             return `❌ Couldn't delete ${label}: ${(err as Error).message}`;
         }
-        const { deleted, errors } = await teardown(guild, allLinked, label);
+        const { moved, deleted, errors } = await teardown(guild, allLinked, label);
         return withErrors(
             wasInProgress
-                ? `🗑️ Deleted **${label}** mid-game. The match is voided (no MMR was applied), players returned to Lobby, ${deleted} channel(s) removed.`
+                ? `🗑️ Deleted **${label}** mid-game. The match is voided (no MMR was applied), ${moved} player(s) returned to Lobby, ${deleted} channel(s) removed.`
                 : `🗑️ Deleted the proposal **${label}**.`,
             errors,
         );

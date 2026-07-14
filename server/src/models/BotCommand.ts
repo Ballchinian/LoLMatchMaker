@@ -5,7 +5,11 @@ import { Schema, model, type Model, type HydratedDocument, Types } from 'mongoos
     public HTTP endpoint), so admin clicks are queued here and the bot polls,
     executes, and writes the outcome back.
 */
-export type BotCommandAction = 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete';
+//'cleanup' is server-enqueued (not a website button): a website-side
+//confirm/cancel/delete of an in-progress match tells the bot to return the
+//players to Lobby and remove the match channels right away (~5s) instead of
+//leaving them to the 60s orphan sweep.
+export type BotCommandAction = 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete' | 'cleanup';
 export type BotCommandStatus = 'queued' | 'running' | 'done' | 'error';
 
 export interface BotCommandAttrs {
@@ -28,7 +32,7 @@ export type BotCommandDoc = HydratedDocument<BotCommandAttrs>;
 const botCommandSchema = new Schema<BotCommandAttrs, BotCommandModel>(
   {
     guildId: { type: String, default: null, index: true },
-    action: { type: String, enum: ['setup', 'split', 'join', 'cancel', 'confirm', 'delete'], required: true },
+    action: { type: String, enum: ['setup', 'split', 'join', 'cancel', 'confirm', 'delete', 'cleanup'], required: true },
     match: { type: Schema.Types.ObjectId, ref: 'Match', required: true },
     matchLabel: { type: String, required: true },
     winner: { type: String, enum: ['A', 'B'] },

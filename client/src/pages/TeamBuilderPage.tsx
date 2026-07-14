@@ -26,11 +26,9 @@ export default function TeamBuilderPage() {
 
   const byId = useMemo(() => new Map((players ?? []).map((p) => [p.id, p])), [players]);
 
-  // Assignment + the press-hold-drag interaction live in this hook.
-  const { assign, setAssign, bench, moveTo, drag, zoneA, zoneB, zoneBench, onGrab } = useDragAssign(
-    selectedIds,
-    toggle,
-  );
+  // Assignment + the drag (mouse) / tap-to-place (touch) interactions live in this hook.
+  const { assign, setAssign, bench, moveTo, drag, held, placeHeld, onRowTap, zoneA, zoneB, zoneBench, onGrab } =
+    useDragAssign(selectedIds, toggle);
 
   const balance = useMutation({
     mutationFn: (exclude: string[]) =>
@@ -124,7 +122,8 @@ export default function TeamBuilderPage() {
           <p className="mt-3 text-xs text-slate-500">
             Auto-balance fills the teams fairly; then drag players between the team boxes and the bench
             (click a team player to bench them, click a bench player to unselect them). The ⇄ / ↧ / →A /
-            →B buttons still work too.
+            →B buttons still work too. On a touch screen, tap a player to pick them up, then tap Team A,
+            Team B or the bench to place them.
           </p>
           {notice && <p className="mt-2 text-sm text-amber-300">{notice}</p>}
         </Card>
@@ -154,10 +153,13 @@ export default function TeamBuilderPage() {
                 byId={byId}
                 highlight="border-sky-700/40"
                 dragId={drag?.id ?? null}
-                dropActive={drag?.over === 'a'}
+                heldId={held}
+                dropActive={drag?.over === 'a' || held !== null}
                 zoneRef={zoneA}
                 onGrab={onGrab}
                 onMove={moveTo}
+                onZoneTap={placeHeld}
+                onRowTap={onRowTap}
               />
               <TeamPanel
                 label="Team B"
@@ -167,10 +169,13 @@ export default function TeamBuilderPage() {
                 byId={byId}
                 highlight="border-rose-700/40"
                 dragId={drag?.id ?? null}
-                dropActive={drag?.over === 'b'}
+                heldId={held}
+                dropActive={drag?.over === 'b' || held !== null}
                 zoneRef={zoneB}
                 onGrab={onGrab}
                 onMove={moveTo}
+                onZoneTap={placeHeld}
+                onRowTap={onRowTap}
               />
             </div>
 
@@ -179,10 +184,13 @@ export default function TeamBuilderPage() {
                 ids={bench}
                 byId={byId}
                 dragId={drag?.id ?? null}
-                dropActive={drag?.over === 'bench'}
+                heldId={held}
+                dropActive={drag?.over === 'bench' || held !== null}
                 zoneRef={zoneBench}
                 onGrab={onGrab}
                 onMove={moveTo}
+                onZoneTap={placeHeld}
+                onRowTap={onRowTap}
               />
             </div>
 

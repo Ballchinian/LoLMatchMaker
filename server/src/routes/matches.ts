@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { Player, type PlayerDoc } from '../models/Player';
 import { Match, type MatchDoc, type RosterEntry } from '../models/Match';
+import { BotCommand } from '../models/BotCommand';
 import { applyMatchResult, type GlickoPlayer } from '../services/glicko';
 import { findRecentCustomResult } from '../services/riot';
 import { riotEnabled, writesProtected } from '../config/env';
@@ -48,6 +49,25 @@ const confirmSchema = z.object({
   // Optional: defaults to the reporter's proposed winner if omitted.
   winner: z.enum(['A', 'B']).optional(),
 });
+
+/*
+    A website-side confirm/cancel/delete of an IN-PROGRESS match strands its
+    Discord voice channels (and the players in them): the bot has no HTTP
+    endpoint to call, so queue a 'cleanup' command it claims within ~5s instead
+    of leaving the players to its 60s orphan sweep. Bot-initiated actions skip
+    this: the bot tears its own channels down. Best effort: on failure the
+    sweep is still the fallback.
+*/
+async function enqueueCleanup(req: Request, match: MatchDoc): Promise<void> {
+  if (!match.guildId || req.actor === 'bot') return;
+  await BotCommand.create({
+    guildId: match.guildId,
+    action: 'cleanup',
+    match: match._id,
+    matchLabel: match.name ?? `#${match._id.toString().slice(-4)}`,
+    status: 'queued',
+  }).catch(() => undefined);
+}
 
 /** Load the given player ids (within the guild scope), erroring if any are missing or duplicated. */
 async function loadPlayers(
@@ -330,7 +350,9 @@ matchesRouter.post(
       throw new ApiError(400, 'Specify the winner (A or B). No proposed winner to fall back on.');
     }
 
+    const wasInProgress = match.status === 'inProgress';
     const players = await confirmMatch(match, effectiveWinner, req.actor!);
+    if (wasInProgress) await enqueueCleanup(req, match);
     res.json({ match, players });
   }),
 );
@@ -389,6 +411,7 @@ matchesRouter.post(
     match.status = 'pending';
     match.startedAt = null;
     await match.save();
+    await enqueueCleanup(req, match);
     res.json({ match });
   }),
 );
@@ -437,7 +460,9 @@ matchesRouter.delete(
       }
     }
 
+    const wasInProgress = match.status === 'inProgress';
     await match.deleteOne();
+    if (wasInProgress) await enqueueCleanup(req, match);
     res.json({ ok: true });
   }),
 );

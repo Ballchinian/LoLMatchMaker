@@ -165,7 +165,9 @@ export interface HealthInfo {
 /** One queued/finished Discord-tab command (mirrors the backend BotCommand). */
 export interface BotCommandRecord {
     _id: string;
-    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete';
+    //'cleanup' is server-enqueued after a website confirm/cancel/delete of an
+    //active game (return players to Lobby); it has no button here.
+    action: 'setup' | 'split' | 'join' | 'cancel' | 'confirm' | 'delete' | 'cleanup';
     match: string;
     matchLabel: string;
     winner?: 'A' | 'B';

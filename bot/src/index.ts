@@ -13,7 +13,7 @@ import {
     apiStopMatch,
     type ApiMatch,
 } from './api';
-import { fetchCommandThreads, findCommandsChannel, performAction } from './commands/matchActions';
+import { fetchCommandThreads, findCommandsChannel, performAction, runCleanup } from './commands/matchActions';
 
 const client = new Client({
     intents: [
@@ -213,10 +213,18 @@ async function pollCommandQueue(): Promise<void> {
                 const matches = await apiGetMatches(guild.id);
                 const match = matches.find((m) => m._id === cmd.match);
                 if (!match) {
-                    result = `❌ Match ${cmd.matchLabel} no longer exists.`;
+                    //cleanup must still run for a website-DELETED match: only its
+                    //label snapshot survives, which is all the teardown needs.
+                    if (cmd.action === 'cleanup') {
+                        closeMatchVotes(cmd.match, 'Vote closed, the match was handled from the website.');
+                        result = await runCleanup(guild, cmd.matchLabel, []);
+                        ok = !result.startsWith('❌');
+                    } else {
+                        result = `❌ Match ${cmd.matchLabel} no longer exists.`;
+                    }
                 } else {
                     const players = await apiGetPlayers(guild.id);
-                    if (cmd.action === 'confirm' || cmd.action === 'delete') {
+                    if (cmd.action === 'confirm' || cmd.action === 'delete' || cmd.action === 'cleanup') {
                         closeMatchVotes(match._id, `Vote closed, an admin ran ${cmd.action} from the website.`);
                     }
                     result = await performAction(guild, cmd.action, match, players, cmd.winner);
@@ -226,6 +234,7 @@ async function pollCommandQueue(): Promise<void> {
         } catch (err) {
             result = `❌ ${(err as Error).message}`;
         }
+        console.log(`[queue] ${cmd.action} ${cmd.matchLabel} (guild ${cmd.guildId}): ${result.split('\n')[0]}`);
         await apiCompleteBotCommand(cmd.guildId, cmd._id, ok, result).catch(() => undefined);
     } finally {
         queueBusy = false;
