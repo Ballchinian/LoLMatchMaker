@@ -107,6 +107,16 @@ Players ordered by rating.
 
 ---
 
+## GET `/api/players/:id`
+
+Retrieve a single player.
+
+### Notes
+
+Scoped to the current server.
+
+---
+
 ## POST `/api/players/search` 🔒
 
 Preview Riot account information without creating a player.
@@ -147,6 +157,30 @@ Admin rating override.
 Update champion pool depth information.
 
 Used by the balancing algorithm's versatility modifier.
+
+---
+
+## PATCH `/api/players/:id/discord` 🔒
+
+Link a player to a Discord account, or unlink one.
+
+### Input
+
+* `discordUserId`: the Discord user id to link, or `null` to unlink
+
+### Rules
+
+* One Discord account maps to at most one player per server.
+* Linking a Discord account that another player already holds is rejected.
+* Linking a player that already holds a different Discord account is rejected; unlink first.
+
+### Notes
+
+Together with `POST /api/players`, this is the registration pathway the bot's
+`/link` command uses: create the player, then attach the Discord account. The
+bot also refuses to move a link off a player who has already played, so a bad
+MMR streak can't be dodged; that guard lives in the bot, not here, so admins can
+still move links from the website.
 
 ---
 
@@ -237,6 +271,28 @@ Move a match from In Progress back to Proposed.
 
 ---
 
+## GET `/api/matches/:id/detected-winner` 🔒
+
+Best-effort lookup of which side won, from the rosters' recent Riot match
+history. Used to prefill result confirmation.
+
+### Allowed States
+
+* Proposed
+* In Progress
+
+### Returns
+
+* `detected`: `{ winner: 'A' | 'B', gameId, gameEndedAt }`, or `null`
+
+### Notes
+
+`null` means "couldn't tell", never "no game happened". Plain customs are not
+guaranteed to appear in the Riot match API, and detection also returns `null`
+when the Riot API is disabled or too few players have linked Riot accounts.
+
+---
+
 ## POST `/api/matches/:id/confirm` 🔒
 
 Confirm a match result.
@@ -301,6 +357,17 @@ Bot endpoint used to claim the next queued command.
 ### Notes
 
 Commands are claimed globally across all servers.
+
+---
+
+## POST `/api/bot-commands/claim` 🔒
+
+Claim the next queued command for a single server.
+
+### Notes
+
+Scoped by server rather than global. Kept for completeness; the bot uses
+`claim-next` instead.
 
 ---
 
